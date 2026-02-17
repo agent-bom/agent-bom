@@ -247,7 +247,7 @@ def validate_url(url: str) -> None:
         )
 
     # Validate domain is not localhost or internal IP
-    if parsed.hostname in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+    if parsed.hostname in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):  # nosec B104 - checking FOR these values to reject them, not binding to them
         raise SecurityError(
             f"Cannot connect to localhost/internal IPs: {parsed.hostname}"
         )
@@ -303,7 +303,7 @@ def create_safe_subprocess_env() -> dict[str, str]:
     # Only include essential environment variables
     safe_env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"),
+        "HOME": os.environ.get("HOME", "/tmp"),  # nosec B108 - safe fallback for subprocess when HOME not set
         "LANG": os.environ.get("LANG", "en_US.UTF-8"),
     }
 
@@ -324,9 +324,11 @@ def validate_mcp_server_config(server_config: dict) -> None:
     Raises:
         SecurityError: If configuration has security issues
     """
-    # Validate command
+    # Validate command (remote/URL-based servers don't require a local command)
     command = server_config.get("command", "")
-    validate_command(command)
+    has_url = bool(server_config.get("url"))
+    if not has_url:
+        validate_command(command)
 
     # Validate arguments
     args = server_config.get("args", [])
@@ -340,7 +342,7 @@ def validate_mcp_server_config(server_config: dict) -> None:
         raise SecurityError("Server env must be a dictionary")
     validate_environment(env)
 
-    logger.info(f"MCP server config validated: {command}")
+    logger.info(f"MCP server config validated: {command or server_config.get('url', 'unknown')}")
 
 
 # Export all validation functions
