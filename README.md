@@ -36,9 +36,11 @@ A vulnerability in a package doesn't just mean "update this dependency." It mean
 - **npx/uvx detection**: Identifies packages from `npx`/`uvx` commands in MCP server configs
 - **Transitive dependency resolution**: Recursively resolves nested dependencies for npx/uvx packages from npm and PyPI registries
 - **Vulnerability scanning**: Queries [OSV.dev](https://osv.dev) for known CVEs across all ecosystems
+- **Vulnerability enrichment**: Enhances CVE data with NVD metadata, EPSS exploit prediction scores, and CISA KEV flags
 - **Blast radius analysis**: Calculates contextual risk scores based on how many agents, credentials, and tools are in the vulnerability's reach
 - **Credential detection**: Flags MCP servers with API keys, tokens, and secrets in environment variables
 - **Multiple output formats**: Console (rich tables/trees), JSON, and CycloneDX 1.6 (SBOM standard)
+- **Scalable deployment**: Local CLI, Docker, CI/CD pipelines, Kubernetes, and cloud functions
 
 ---
 
@@ -114,6 +116,29 @@ Control the recursion depth (default: 3):
 agent-bom scan --transitive --max-depth 5
 ```
 
+### Enhanced vulnerability scanning with enrichment
+
+```bash
+# Enable NVD, EPSS, and CISA KEV enrichment
+agent-bom scan --enrich
+
+# With NVD API key (recommended for faster scanning)
+export NVD_API_KEY="your-api-key-here"
+agent-bom scan --enrich
+
+# Or pass directly
+agent-bom scan --enrich --nvd-api-key="your-key"
+```
+
+**What enrichment provides:**
+- **NVD**: CWE mappings, publish dates, detailed metadata
+- **EPSS**: Exploit prediction scores (probability of exploitation in next 30 days)
+- **CISA KEV**: Known Exploited Vulnerabilities catalog (actively exploited CVEs)
+
+Get NVD API key: https://nvd.nist.gov/developers/request-an-api-key
+
+See [ENRICHMENT_GUIDE.md](ENRICHMENT_GUIDE.md) for detailed usage.
+
 ### Show config locations
 
 ```bash
@@ -156,10 +181,14 @@ agent-bom where
 
 💥 Blast Radius Analysis
 
- Risk  Vuln ID            Package              Severity  Agents  Servers  Creds  Fix
- 8.3   GHSA-xxxx-xxxx     axios@1.6.0          critical  3       2        2      1.7.4
- 6.5   CVE-2024-1234      express@4.18.2       high      2       1        1      4.19.0
- 4.0   CVE-2024-5678      lodash@4.17.20       medium    1       1        0      4.17.21
+ Risk  Vuln ID            Package              Severity  EPSS   KEV  Agents  Servers  Creds  Fix
+ 10.0  CVE-2024-1234      express@4.18.2       critical  85%    🔥   3       2        2      4.19.0
+ 8.3   GHSA-xxxx-xxxx     axios@1.6.0          high      45%    —    2       1        1      1.7.4
+ 4.0   CVE-2024-5678      lodash@4.17.20       medium    12%    —    1       1        0      4.17.21
+
+Legend:
+  EPSS: Exploit probability (higher = more likely to be exploited)
+  KEV: 🔥 = In CISA Known Exploited Vulnerabilities catalog
 ```
 
 ### CycloneDX
@@ -171,6 +200,76 @@ Exports a standards-compliant CycloneDX 1.6 BOM with:
 - Full dependency graph (agent → server → packages)
 - Vulnerability data with severity ratings and fix recommendations
 - Custom properties for agent-bom metadata (credentials, transport type, tools)
+
+---
+
+## Deployment Options
+
+agent-bom can be deployed in multiple ways, from local CLI to enterprise-scale infrastructure scanning.
+
+### Docker
+
+```bash
+# Build image
+docker build -t agent-bom:latest .
+
+# Scan with mounted configs
+docker run --rm \
+  -v ~/.config:/root/.config:ro \
+  -v $(pwd)/reports:/workspace/reports \
+  agent-bom:latest scan --enrich --output /workspace/reports/ai-bom.json
+```
+
+### Docker Compose
+
+```bash
+# Start services (includes Redis cache and PostgreSQL)
+docker-compose up -d
+
+# View scan results
+cat reports/ai-bom.json
+```
+
+### CI/CD Integration
+
+**GitHub Actions:**
+```yaml
+- name: AI-BOM Security Scan
+  run: |
+    pip install agent-bom
+    agent-bom scan --enrich --format json --output ai-bom.json
+```
+
+**GitLab CI:**
+```yaml
+ai-bom-scan:
+  script:
+    - pip install agent-bom
+    - agent-bom scan --enrich --output ai-bom.json
+  artifacts:
+    reports:
+      cyclonedx: ai-bom.json
+```
+
+**Kubernetes CronJob:**
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: agent-bom-scanner
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: agent-bom
+            image: agent-bom:latest
+            args: ["scan", "--enrich", "--format", "json"]
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment architectures, scalability patterns, and remote scanning options.
 
 ---
 

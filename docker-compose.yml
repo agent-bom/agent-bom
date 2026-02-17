@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # agent-bom scanner service
+  agent-bom:
+    build: .
+    image: agent-bom:latest
+    container_name: agent-bom-scanner
+    environment:
+      # API keys (load from .env file or set here)
+      - NVD_API_KEY=${NVD_API_KEY:-}
+      # Cloud credentials
+      - SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT:-}
+      - SNOWFLAKE_USER=${SNOWFLAKE_USER:-}
+      - SNOWFLAKE_PASSWORD=${SNOWFLAKE_PASSWORD:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      # Mount local config directories (read-only)
+      - ~/.config:/root/.config:ro
+      - ~/.claude:/root/.claude:ro
+      # Mount current directory for output
+      - ./reports:/workspace/reports
+      # Mount test configs
+      - ./tests:/workspace/tests:ro
+    command: scan --enrich --format json --output /workspace/reports/ai-bom.json
+
+  # Redis cache for distributed scanning (future)
+  redis:
+    image: redis:7-alpine
+    container_name: agent-bom-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  # PostgreSQL for result storage (future)
+  postgres:
+    image: postgres:15-alpine
+    container_name: agent-bom-db
+    environment:
+      - POSTGRES_DB=agent_bom
+      - POSTGRES_USER=agent_bom
+      - POSTGRES_PASSWORD=changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  default:
+    name: agent-bom-network

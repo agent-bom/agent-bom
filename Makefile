@@ -1,0 +1,70 @@
+.PHONY: help install test lint docker-build docker-run scan clean
+
+help:  ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+install:  ## Install agent-bom in development mode
+	pip install -e ".[dev]"
+
+test:  ## Run unit tests
+	pytest tests/ -v --cov=agent_bom
+
+lint:  ## Run linters (ruff + mypy)
+	ruff check src/ tests/
+	mypy src/ --ignore-missing-imports
+
+format:  ## Format code with ruff
+	ruff format src/ tests/
+
+docker-build:  ## Build Docker image
+	docker build -t agent-bom:latest .
+
+docker-run:  ## Run agent-bom in Docker container
+	docker run --rm \
+		-v $(PWD):/workspace \
+		-v ~/.config:/root/.config:ro \
+		agent-bom:latest scan --help
+
+scan:  ## Run local scan with enrichment
+	agent-bom scan --enrich --format json --output report.json
+
+scan-transitive:  ## Run scan with transitive dependencies
+	agent-bom scan --enrich --transitive --max-depth 3 --output report.json
+
+e2e-test:  ## Run end-to-end tests
+	chmod +x test_e2e.sh
+	./test_e2e.sh
+
+docker-compose-up:  ## Start Docker Compose services
+	docker-compose up -d
+
+docker-compose-down:  ## Stop Docker Compose services
+	docker-compose down -v
+
+clean:  ## Clean build artifacts
+	rm -rf build/ dist/ *.egg-info
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name '*.pyc' -delete
+	rm -f report.json ai-bom*.json *.cdx.json
+
+publish-test:  ## Publish to TestPyPI
+	python -m build
+	twine upload --repository testpypi dist/*
+
+publish:  ## Publish to PyPI
+	python -m build
+	twine upload dist/*
+
+version:  ## Show agent-bom version
+	agent-bom --version
+
+demo:  ## Run demo scan
+	@echo "Running demo scan..."
+	agent-bom scan --enrich --format console
+	@echo ""
+	@echo "JSON output:"
+	agent-bom scan --enrich --format json --output demo.json
+	@cat demo.json | python -m json.tool | head -50
