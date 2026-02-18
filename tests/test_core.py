@@ -348,3 +348,120 @@ def test_cli_help_shows_exit_codes():
     assert "Exit codes" in result.output
     assert "0" in result.output
     assert "1" in result.output
+
+
+# ─── History / Diff Tests ─────────────────────────────────────────────────────
+
+
+def test_history_save_and_load(tmp_path, monkeypatch):
+    from agent_bom.history import save_report, load_report, HISTORY_DIR
+    monkeypatch.setattr("agent_bom.history.HISTORY_DIR", tmp_path)
+
+    data = {"ai_bom_version": "0.3.0", "generated_at": "2025-01-01T00:00:00", "summary": {}, "agents": [], "blast_radius": []}
+    saved = save_report(data, label="test")
+    assert saved.exists()
+    loaded = load_report(saved)
+    assert loaded["ai_bom_version"] == "0.3.0"
+
+
+def test_diff_no_changes():
+    from agent_bom.history import diff_reports
+
+    report = {
+        "generated_at": "2025-01-01T00:00:00",
+        "agents": [{"name": "a", "mcp_servers": [{"packages": [{"name": "express", "version": "4.18.2", "ecosystem": "npm"}]}]}],
+        "blast_radius": [{"vulnerability_id": "CVE-2024-1", "package": "express@4.18.2", "ecosystem": "npm", "severity": "HIGH"}],
+    }
+    diff = diff_reports(report, report)
+    assert diff["summary"]["new_findings"] == 0
+    assert diff["summary"]["resolved_findings"] == 0
+    assert diff["summary"]["unchanged_findings"] == 1
+
+
+def test_diff_new_finding():
+    from agent_bom.history import diff_reports
+
+    baseline = {
+        "generated_at": "2025-01-01T00:00:00",
+        "agents": [],
+        "blast_radius": [],
+    }
+    current = {
+        "generated_at": "2025-01-02T00:00:00",
+        "agents": [],
+        "blast_radius": [
+            {"vulnerability_id": "CVE-2024-99", "package": "lodash@4.17.20", "ecosystem": "npm", "severity": "CRITICAL"},
+        ],
+    }
+    diff = diff_reports(baseline, current)
+    assert diff["summary"]["new_findings"] == 1
+    assert diff["summary"]["resolved_findings"] == 0
+    assert len(diff["new"]) == 1
+    assert diff["new"][0]["vulnerability_id"] == "CVE-2024-99"
+
+
+def test_diff_resolved_finding():
+    from agent_bom.history import diff_reports
+
+    baseline = {
+        "generated_at": "2025-01-01T00:00:00",
+        "agents": [],
+        "blast_radius": [
+            {"vulnerability_id": "CVE-2023-10", "package": "axios@1.6.0", "ecosystem": "npm", "severity": "HIGH"},
+        ],
+    }
+    current = {"generated_at": "2025-01-02T00:00:00", "agents": [], "blast_radius": []}
+    diff = diff_reports(baseline, current)
+    assert diff["summary"]["resolved_findings"] == 1
+    assert len(diff["resolved"]) == 1
+
+
+def test_cli_check_help():
+    runner = CliRunner()
+    result = runner.invoke(main, ["check", "--help"])
+    assert result.exit_code == 0
+    assert "ecosystem" in result.output.lower()
+
+
+def test_cli_history_help():
+    runner = CliRunner()
+    result = runner.invoke(main, ["history", "--help"])
+    assert result.exit_code == 0
+
+
+def test_cli_diff_help():
+    runner = CliRunner()
+    result = runner.invoke(main, ["diff", "--help"])
+    assert result.exit_code == 0
+    assert "baseline" in result.output.lower()
+
+
+def test_cli_scan_new_flags():
+    """New policy flags appear in --help."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "--fail-on-kev" in result.output
+    assert "--fail-if-ai-risk" in result.output
+    assert "--save" in result.output
+    assert "--baseline" in result.output
+
+
+def test_json_output_has_enriched_vuln_fields(sample_report):
+    data = to_json(sample_report)
+    agents = data["agents"]
+    assert len(agents) > 0
+    server = agents[0]["mcp_servers"][0]
+    assert "mcp_version" in server
+    vuln = server["packages"][0]["vulnerabilities"][0]
+    assert "epss_score" in vuln
+    assert "is_kev" in vuln
+    assert "cwe_ids" in vuln
+
+
+def test_json_output_blast_radius_has_new_fields(sample_report):
+    data = to_json(sample_report)
+    br = data["blast_radius"][0]
+    assert "ai_risk_context" in br
+    assert "epss_score" in br
+    assert "is_kev" in br
+    assert "cvss_score" in br

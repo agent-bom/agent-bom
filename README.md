@@ -63,12 +63,21 @@ pip install -e .
 | `agent-bom scan --enrich --nvd-api-key KEY` | Enrich with higher NVD rate limits |
 | `agent-bom scan --no-scan` | Inventory only — skip vulnerability scanning |
 | `agent-bom scan --no-tree` | Skip dependency tree in console output |
+| `agent-bom scan --save` | Save scan to `~/.agent-bom/history/` for diffing |
+| `agent-bom scan --baseline report.json` | Diff current scan against a saved baseline |
 | `agent-bom scan -f json -o report.json` | Export JSON report |
 | `agent-bom scan -f cyclonedx -o bom.cdx.json` | Export CycloneDX 1.6 BOM |
 | `agent-bom scan -f sarif -o bom.sarif` | Export SARIF for GitHub Security tab |
 | `agent-bom scan -f text` | Plain text output (for grep/awk) |
 | `agent-bom scan -f json -o - \| jq .` | Pipe clean JSON to stdout |
 | `agent-bom scan -q --fail-on-severity high` | CI gate — exit 1 if high+ vulns found |
+| `agent-bom scan --fail-on-kev` | CI gate — exit 1 if any CISA KEV finding (use with `--enrich`) |
+| `agent-bom scan --fail-if-ai-risk` | CI gate — exit 1 if AI framework has vulns + exposed creds |
+| `agent-bom check express@4.18.2 -e npm` | Pre-install check — is this package safe? |
+| `agent-bom check "npx @scope/mcp-server"` | Check a package before running with npx |
+| `agent-bom history` | List saved scan history |
+| `agent-bom diff baseline.json` | Diff latest scan against a baseline |
+| `agent-bom diff baseline.json current.json` | Diff any two report files |
 | `agent-bom inventory` | List discovered agents (no vuln scan) |
 | `agent-bom inventory -c config.json` | Inventory a specific config file |
 | `agent-bom validate agents.json` | Validate an inventory file against the schema |
@@ -204,9 +213,12 @@ agent-bom validate agents.json   # exits 0 if valid, 1 with clear errors if not
 - **Blast radius scoring** — risk score boosted by KEV membership (+1.0), high EPSS (+0.5), and AI framework context (+0.5)
 - **AI framework risk tagging** — LangChain, OpenAI, transformers, MCP, and 25+ other AI packages flagged with context: *"AI framework runs inside an agent with 3 exposed credentials and 7 reachable tools"*
 - **Remediation plan** — grouped upgrade actions ordered by blast radius impact (agents protected × credentials freed × vulns cleared × KEV/AI flags)
+- **Pre-install safety check** — `agent-bom check express@4.18.2` queries OSV before you run `npx -y`
+- **Scan history** — `--save` persists scans to `~/.agent-bom/history/`; `agent-bom diff` shows new/resolved findings between runs
+- **Policy CI gates** — `--fail-on-severity`, `--fail-on-kev`, `--fail-if-ai-risk` for layered CI enforcement
 - **Credential detection** — flags MCP servers exposing API keys, tokens, and secrets in env vars
 - **Output formats** — rich console, JSON, CycloneDX 1.6, SARIF 2.1, plain text
-- **CI/CD ready** — `--fail-on-severity`, `--quiet`, stdout piping (`-o -`), exit codes
+- **CI/CD ready** — `--quiet`, stdout piping (`-o -`), multiple exit code policies
 
 ---
 
@@ -281,8 +293,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for CI/CD, Kubernetes, and remote scanning se
 
 **Output & policy:**
 - [x] SARIF 2.1 output for GitHub Security tab
+- [x] Policy CI gates: `--fail-on-kev`, `--fail-if-ai-risk`, `--fail-on-severity`
+- [x] Scan history and baseline diffing (`--save`, `--baseline`, `agent-bom diff`)
 - [ ] SPDX 3.0 output (AI-BOM profile)
-- [ ] Policy engine ("no DB-credential server may have critical vulns")
+- [ ] Policy-as-code file ("no DB-credential server may have critical vulns")
 - [ ] MITRE ATLAS mapping for AI/ML threats
 
 ---

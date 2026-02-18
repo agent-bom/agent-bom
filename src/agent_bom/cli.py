@@ -19,6 +19,7 @@ from agent_bom.output import (
     export_sarif,
     print_agent_tree,
     print_blast_radius,
+    print_diff,
     print_remediation_plan,
     print_summary,
     to_cyclonedx,
@@ -89,6 +90,10 @@ def main():
     type=click.Choice(["critical", "high", "medium", "low"]),
     help="Exit 1 if vulnerabilities of this severity or higher are found",
 )
+@click.option("--fail-on-kev", is_flag=True, help="Exit 1 if any finding appears in CISA KEV (must use --enrich)")
+@click.option("--fail-if-ai-risk", is_flag=True, help="Exit 1 if an AI framework package with credentials has vulnerabilities")
+@click.option("--save", "save_report", is_flag=True, help="Save this scan to ~/.agent-bom/history/ for future diffing")
+@click.option("--baseline", type=click.Path(exists=True), help="Path to a baseline report JSON to diff against current scan")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -103,13 +108,18 @@ def scan(
     nvd_api_key: Optional[str],
     quiet: bool,
     fail_on_severity: Optional[str],
+    fail_on_kev: bool,
+    fail_if_ai_risk: bool,
+    save_report: bool,
+    baseline: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
     \b
     Exit codes:
       0  Clean — no vulnerabilities at or above threshold
-      1  Fail — vulnerabilities found at or above --fail-on-severity
+      1  Fail — vulnerabilities found at or above --fail-on-severity,
+                --fail-on-kev, or --fail-if-ai-risk
     """
     # Route console output based on flags
     is_stdout = output == "-"
@@ -289,7 +299,23 @@ def scan(
             export_json(report, output)
         con.print(f"\n  [green]✓[/green] Report: {output}")
 
-    # Step 6: Exit code based on severity
+    # Step 6: Save report to history
+    current_report_json = to_json(report)
+    if save_report:
+        from agent_bom.history import save_report as _save
+        saved_path = _save(current_report_json)
+        con.print(f"\n  [green]✓[/green] Report saved to history: {saved_path}")
+
+    # Step 7: Diff against baseline
+    if baseline:
+        from agent_bom.history import diff_reports, load_report
+        baseline_data = load_report(Path(baseline))
+        diff = diff_reports(baseline_data, current_report_json)
+        print_diff(diff)
+
+    # Step 8: Exit code based on policy flags
+    exit_code = 0
+
     if fail_on_severity and blast_radii:
         threshold = SEVERITY_ORDER.get(fail_on_severity, 0)
         for br in blast_radii:
@@ -300,7 +326,31 @@ def scan(
                         f"\n  [red]Exiting with code 1: found {sev} vulnerability "
                         f"({br.vulnerability.id})[/red]"
                     )
-                sys.exit(1)
+                exit_code = 1
+                break
+
+    if fail_on_kev and blast_radii:
+        kev_findings = [br for br in blast_radii if br.vulnerability.is_kev]
+        if kev_findings:
+            if not quiet:
+                con.print(
+                    f"\n  [red bold]Exiting with code 1: {len(kev_findings)} CISA KEV "
+                    f"finding(s) found (use --enrich if not already)[/red bold]"
+                )
+            exit_code = 1
+
+    if fail_if_ai_risk and blast_radii:
+        ai_findings = [br for br in blast_radii if br.ai_risk_context and br.exposed_credentials]
+        if ai_findings:
+            if not quiet:
+                con.print(
+                    f"\n  [red bold]Exiting with code 1: {len(ai_findings)} AI framework "
+                    f"package(s) with vulnerabilities and exposed credentials[/red bold]"
+                )
+            exit_code = 1
+
+    if exit_code:
+        sys.exit(exit_code)
 
 
 def _format_text(report: AIBOMReport, blast_radii: list) -> str:
@@ -473,6 +523,193 @@ def where():
     console.print("\n  [bold cyan]Project-level configs[/bold cyan]")
     for config_name in PROJECT_CONFIG_FILES:
         console.print(f"    [dim]  ./{config_name}[/dim]")
+
+
+@main.command()
+@click.argument("package_spec")
+@click.option(
+    "--ecosystem", "-e",
+    type=click.Choice(["npm", "pypi", "go", "cargo", "maven", "nuget"]),
+    help="Package ecosystem (inferred from name/command if omitted)",
+)
+@click.option("--quiet", "-q", is_flag=True, help="Only print vuln count, no details")
+def check(package_spec: str, ecosystem: Optional[str], quiet: bool):
+    """Check a package for known vulnerabilities before installing.
+
+    \b
+    Examples:
+      agent-bom check express@4.18.2 --ecosystem npm
+      agent-bom check requests@2.28.0 --ecosystem pypi
+      agent-bom check "npx @modelcontextprotocol/server-filesystem"
+
+    \b
+    Exit codes:
+      0  Clean — no known vulnerabilities
+      1  Unsafe — vulnerabilities found
+    """
+    import asyncio
+
+    console = Console()
+
+    # Parse package spec: handle "npx package-name", "uvx package-name", or "name@version"
+    spec = package_spec.strip()
+    if spec.startswith("npx ") or spec.startswith("uvx "):
+        parts = spec.split()
+        # npx -y @scope/pkg → take last arg that looks like a package
+        pkg_args = [p for p in parts[1:] if not p.startswith("-")]
+        spec = pkg_args[0] if pkg_args else spec
+        if not ecosystem:
+            ecosystem = "pypi" if package_spec.startswith("uvx") else "npm"
+
+    if "@" in spec and not spec.startswith("@"):
+        name, version = spec.rsplit("@", 1)
+    elif spec.startswith("@") and spec.count("@") > 1:
+        # Scoped npm: @scope/pkg@version
+        last_at = spec.rindex("@")
+        name, version = spec[:last_at], spec[last_at + 1:]
+    else:
+        name, version = spec, "unknown"
+
+    # Infer ecosystem from name if not provided
+    if not ecosystem:
+        if name.startswith("@") or "-" in name and "." not in name:
+            ecosystem = "npm"
+        else:
+            ecosystem = "pypi"
+
+    from agent_bom.models import Package
+    from agent_bom.scanners import build_vulnerabilities, query_osv_batch
+
+    pkg = Package(name=name, version=version, ecosystem=ecosystem)
+
+    if version == "unknown":
+        console.print(f"[yellow]⚠ No version specified for {name} — skipping OSV lookup.[/yellow]")
+        console.print("  Provide a version: agent-bom check name@version --ecosystem ecosystem")
+        sys.exit(0)
+
+    console.print(f"\n[bold blue]🔍 Checking {name}@{version} ({ecosystem})[/bold blue]\n")
+
+    results = asyncio.run(query_osv_batch([pkg]))
+    key = f"{ecosystem}:{name}@{version}"
+    vuln_data = results.get(key, [])
+
+    if not vuln_data:
+        console.print(f"  [green]✓ No known vulnerabilities in {name}@{version}[/green]\n")
+        sys.exit(0)
+
+    vulns = build_vulnerabilities(vuln_data, pkg)
+
+    if not quiet:
+        from rich.table import Table
+        table = Table(title=f"{name}@{version} — {len(vulns)} vulnerability/ies found")
+        table.add_column("ID", width=20)
+        table.add_column("Severity", width=10)
+        table.add_column("CVSS", width=6, justify="right")
+        table.add_column("Fix", width=15)
+        table.add_column("Summary", max_width=50)
+
+        severity_styles = {
+            "critical": "red bold", "high": "red",
+            "medium": "yellow", "low": "dim",
+        }
+        for v in vulns:
+            sev = v.severity.value.lower()
+            style = severity_styles.get(sev, "white")
+            table.add_row(
+                v.id,
+                f"[{style}]{v.severity.value}[/{style}]",
+                f"{v.cvss_score:.1f}" if v.cvss_score else "—",
+                v.fixed_version or "—",
+                (v.summary or "")[:80],
+            )
+        console.print(table)
+        console.print()
+
+    console.print(f"  [red]✗ {len(vulns)} vulnerability/ies found — do not install without review.[/red]\n")
+    sys.exit(1)
+
+
+@main.command("history")
+@click.option("--limit", "-n", type=int, default=10, help="Number of recent scans to show")
+def history_cmd(limit: int):
+    """List saved scan reports from ~/.agent-bom/history/."""
+    from agent_bom.history import list_reports, load_report
+
+    console = Console()
+    console.print(BANNER, style="bold blue")
+
+    reports = list_reports()
+    if not reports:
+        console.print("\n  [dim]No saved scans yet. Run with --save to start tracking history.[/dim]\n")
+        return
+
+    console.print(f"\n[bold blue]📂 Scan History[/bold blue]  "
+                  f"({len(reports)} total, showing {min(limit, len(reports))})\n")
+
+    from rich.table import Table
+    table = Table()
+    table.add_column("File", width=30)
+    table.add_column("Generated", width=22)
+    table.add_column("Agents", width=7, justify="center")
+    table.add_column("Packages", width=9, justify="center")
+    table.add_column("Vulns", width=6, justify="center")
+    table.add_column("Critical", width=9, justify="center")
+
+    for path in reports[:limit]:
+        try:
+            data = load_report(path)
+            summary = data.get("summary", {})
+            table.add_row(
+                path.name,
+                data.get("generated_at", "unknown")[:19].replace("T", " "),
+                str(summary.get("total_agents", "?")),
+                str(summary.get("total_packages", "?")),
+                str(summary.get("total_vulnerabilities", "?")),
+                str(summary.get("critical_findings", "?")),
+            )
+        except Exception:
+            table.add_row(path.name, "—", "—", "—", "—", "—")
+
+    console.print(table)
+    console.print(f"\n  [dim]History directory: {reports[0].parent}[/dim]\n")
+
+
+@main.command("diff")
+@click.argument("baseline", type=click.Path(exists=True))
+@click.argument("current", type=click.Path(exists=True), required=False)
+def diff_cmd(baseline: str, current: Optional[str]):
+    """Diff two scan reports to see what changed.
+
+    \b
+    Usage:
+      agent-bom diff baseline.json                # diff against latest saved scan
+      agent-bom diff baseline.json current.json   # diff two specific files
+
+    \b
+    Exit codes:
+      0  No new findings
+      1  New vulnerability findings detected
+    """
+    from agent_bom.history import diff_reports, latest_report, load_report
+
+    console = Console()
+
+    baseline_data = load_report(Path(baseline))
+
+    if current:
+        current_data = load_report(Path(current))
+    else:
+        latest = latest_report()
+        if not latest:
+            console.print("[red]No saved scans in history. Run: agent-bom scan --save[/red]")
+            sys.exit(1)
+        current_data = load_report(latest)
+
+    diff = diff_reports(baseline_data, current_data)
+    print_diff(diff)
+
+    if diff["summary"]["new_findings"] > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
