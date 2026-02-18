@@ -99,6 +99,7 @@ def main():
 @click.option("--save", "save_report", is_flag=True, help="Save this scan to ~/.agent-bom/history/ for future diffing")
 @click.option("--baseline", type=click.Path(exists=True), help="Path to a baseline report JSON to diff against current scan")
 @click.option("--policy", type=click.Path(exists=True), help="Policy file (JSON/YAML) with declarative security rules")
+@click.option("--sbom", "sbom_file", type=click.Path(exists=True), help="Existing SBOM file to ingest (CycloneDX or SPDX JSON from Syft/Grype/Trivy)")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -118,6 +119,7 @@ def scan(
     save_report: bool,
     baseline: Optional[str],
     policy: Optional[str],
+    sbom_file: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -215,6 +217,20 @@ def scan(
         con.print("  Use --project, --config-dir, or --inventory to specify a target.")
         sys.exit(0)
 
+    # Step 1b: Load SBOM packages if provided
+    sbom_packages: list = []
+    if sbom_file:
+        from agent_bom.sbom import load_sbom
+        try:
+            sbom_packages, sbom_fmt = load_sbom(sbom_file)
+            con.print(
+                f"\n[bold blue]Loaded SBOM ({sbom_fmt}): "
+                f"{len(sbom_packages)} package(s) from {sbom_file}[/bold blue]\n"
+            )
+        except (FileNotFoundError, ValueError) as e:
+            con.print(f"\n  [red]SBOM error: {e}[/red]")
+            sys.exit(1)
+
     # Step 2: Extract packages
     con.print("\n[bold blue]Extracting package dependencies...[/bold blue]\n")
     if transitive:
@@ -227,9 +243,13 @@ def scan(
             pre_populated = list(server.packages)
             discovered = extract_packages(server, resolve_transitive=transitive, max_depth=max_depth)
 
-            # Merge: discovered packages + any pre-populated that weren't already found
+            # Merge: discovered + pre-populated + SBOM packages (deduplicated)
             discovered_names = {(p.name, p.ecosystem) for p in discovered}
             merged = discovered + [p for p in pre_populated if (p.name, p.ecosystem) not in discovered_names]
+            if sbom_packages:
+                existing_names = {(p.name, p.ecosystem) for p in merged}
+                merged += [p for p in sbom_packages if (p.name, p.ecosystem) not in existing_names]
+                sbom_packages = []  # Attach to first server only, avoid duplication
             server.packages = merged
 
             total_packages += len(server.packages)
