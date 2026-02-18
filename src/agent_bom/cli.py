@@ -17,14 +17,18 @@ from agent_bom.output import (
     export_cyclonedx,
     export_json,
     export_sarif,
+    export_spdx,
     print_agent_tree,
     print_blast_radius,
     print_diff,
+    print_policy_results,
     print_remediation_plan,
+    print_severity_chart,
     print_summary,
     to_cyclonedx,
     to_json,
     to_sarif,
+    to_spdx,
 )
 from agent_bom.parsers import extract_packages
 from agent_bom.resolver import resolve_all_versions_sync
@@ -74,7 +78,7 @@ def main():
 @click.option("--output", "-o", type=str, help="Output file path (use '-' for stdout)")
 @click.option(
     "--format", "-f", "output_format",
-    type=click.Choice(["console", "json", "cyclonedx", "sarif", "text"]),
+    type=click.Choice(["console", "json", "cyclonedx", "sarif", "spdx", "text"]),
     default="console",
     help="Output format",
 )
@@ -94,6 +98,7 @@ def main():
 @click.option("--fail-if-ai-risk", is_flag=True, help="Exit 1 if an AI framework package with credentials has vulnerabilities")
 @click.option("--save", "save_report", is_flag=True, help="Save this scan to ~/.agent-bom/history/ for future diffing")
 @click.option("--baseline", type=click.Path(exists=True), help="Path to a baseline report JSON to diff against current scan")
+@click.option("--policy", type=click.Path(exists=True), help="Policy file (JSON/YAML) with declarative security rules")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -112,14 +117,15 @@ def scan(
     fail_if_ai_risk: bool,
     save_report: bool,
     baseline: Optional[str],
+    policy: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
     \b
     Exit codes:
-      0  Clean — no vulnerabilities at or above threshold
-      1  Fail — vulnerabilities found at or above --fail-on-severity,
-                --fail-on-kev, or --fail-if-ai-risk
+      0  Clean — no violations, no vulnerabilities at or above threshold
+      1  Fail — policy failure, or vulnerabilities found at or above
+                --fail-on-severity / --fail-on-kev / --fail-if-ai-risk
     """
     # Route console output based on flags
     is_stdout = output == "-"
@@ -264,6 +270,8 @@ def scan(
             sys.stdout.write(json.dumps(to_cyclonedx(report), indent=2))
         elif output_format == "sarif":
             sys.stdout.write(json.dumps(to_sarif(report), indent=2))
+        elif output_format == "spdx":
+            sys.stdout.write(json.dumps(to_spdx(report), indent=2))
         else:
             sys.stdout.write(json.dumps(to_json(report), indent=2))
         sys.stdout.write("\n")
@@ -271,6 +279,7 @@ def scan(
         print_summary(report)
         if not no_tree:
             print_agent_tree(report)
+        print_severity_chart(report)
         print_blast_radius(report)
         print_remediation_plan(blast_radii)
     elif output_format == "text" and not output:
@@ -287,6 +296,10 @@ def scan(
         out_path = output or "agent-bom.sarif"
         export_sarif(report, out_path)
         con.print(f"\n  [green]✓[/green] SARIF report: {out_path}")
+    elif output_format == "spdx":
+        out_path = output or "agent-bom.spdx.json"
+        export_spdx(report, out_path)
+        con.print(f"\n  [green]✓[/green] SPDX 3.0 BOM: {out_path}")
     elif output_format == "text" and output:
         Path(output).write_text(_format_text(report, blast_radii))
         con.print(f"\n  [green]✓[/green] Text report: {output}")
@@ -295,6 +308,8 @@ def scan(
             export_cyclonedx(report, output)
         elif output.endswith(".sarif"):
             export_sarif(report, output)
+        elif output.endswith(".spdx.json"):
+            export_spdx(report, output)
         else:
             export_json(report, output)
         con.print(f"\n  [green]✓[/green] Report: {output}")
@@ -312,6 +327,19 @@ def scan(
         baseline_data = load_report(Path(baseline))
         diff = diff_reports(baseline_data, current_report_json)
         print_diff(diff)
+
+    # Step 7b: Policy evaluation
+    policy_passed = True
+    if policy and blast_radii:
+        from agent_bom.policy import evaluate_policy, load_policy
+        try:
+            policy_data = load_policy(policy)
+            policy_result = evaluate_policy(policy_data, blast_radii)
+            print_policy_results(policy_result)
+            policy_passed = policy_result["passed"]
+        except (FileNotFoundError, ValueError) as e:
+            con.print(f"\n  [red]Policy error: {e}[/red]")
+            sys.exit(1)
 
     # Step 8: Exit code based on policy flags
     exit_code = 0
@@ -348,6 +376,9 @@ def scan(
                     f"package(s) with vulnerabilities and exposed credentials[/red bold]"
                 )
             exit_code = 1
+
+    if not policy_passed:
+        exit_code = 1
 
     if exit_code:
         sys.exit(exit_code)
@@ -710,6 +741,31 @@ def diff_cmd(baseline: str, current: Optional[str]):
 
     if diff["summary"]["new_findings"] > 0:
         sys.exit(1)
+
+
+@main.command("policy-template")
+@click.option("--output", "-o", type=str, default="policy.json", help="Output path for the generated policy file")
+def policy_template(output: str):
+    """Generate a starter policy file with common rules.
+
+    \b
+    Example:
+      agent-bom policy-template                    # writes policy.json
+      agent-bom policy-template -o my-policy.json  # custom path
+
+    Edit the generated file, then use it with:
+      agent-bom scan --policy policy.json
+    """
+    import json as _json
+
+    from agent_bom.policy import POLICY_TEMPLATE
+
+    console = Console()
+    out_path = Path(output)
+    out_path.write_text(_json.dumps(POLICY_TEMPLATE, indent=2))
+    console.print(f"\n  [green]✓[/green] Policy template written to {out_path}")
+    console.print("  [dim]Edit the rules, then run:[/dim]")
+    console.print(f"  [bold]agent-bom scan --policy {out_path}[/bold]\n")
 
 
 if __name__ == "__main__":

@@ -465,3 +465,141 @@ def test_json_output_blast_radius_has_new_fields(sample_report):
     assert "epss_score" in br
     assert "is_kev" in br
     assert "cvss_score" in br
+
+
+# ─── Policy Engine Tests ──────────────────────────────────────────────────────
+
+
+def test_policy_pass_no_vulns():
+    from agent_bom.policy import evaluate_policy
+
+    policy = {
+        "name": "test",
+        "rules": [{"id": "no-critical", "severity_gte": "CRITICAL", "action": "fail"}],
+    }
+    result = evaluate_policy(policy, [])
+    assert result["passed"]
+    assert result["failures"] == []
+    assert result["warnings"] == []
+
+
+def test_policy_fail_critical(sample_report):
+    from agent_bom.policy import evaluate_policy
+
+    policy = {
+        "name": "test",
+        "rules": [{"id": "no-high", "severity_gte": "HIGH", "action": "fail"}],
+    }
+    result = evaluate_policy(policy, sample_report.blast_radii)
+    # sample_report has a HIGH vuln — should fail
+    assert not result["passed"]
+    assert len(result["failures"]) >= 1
+    assert result["failures"][0]["rule_id"] == "no-high"
+
+
+def test_policy_warn_medium():
+    from agent_bom.models import Agent, AgentType, BlastRadius, MCPServer, Package, Severity, Vulnerability
+    from agent_bom.policy import evaluate_policy
+
+    vuln = Vulnerability(id="CVE-2024-9999", summary="Medium issue", severity=Severity.MEDIUM)
+    pkg = Package(name="requests", version="2.27.0", ecosystem="pypi")
+    server = MCPServer(name="api", command="uvx", env={})
+    agent = Agent(name="bot", agent_type=AgentType.CUSTOM, config_path="/tmp/test")
+    br = BlastRadius(
+        vulnerability=vuln, package=pkg,
+        affected_servers=[server], affected_agents=[agent],
+        exposed_credentials=[], exposed_tools=[],
+    )
+    br.calculate_risk_score()
+
+    policy = {
+        "name": "test",
+        "rules": [{"id": "warn-medium", "severity_gte": "MEDIUM", "action": "warn"}],
+    }
+    result = evaluate_policy(policy, [br])
+    assert result["passed"]  # warnings don't fail
+    assert len(result["warnings"]) == 1
+
+
+def test_policy_template_command():
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_file = str(Path(tmpdir) / "policy.json")
+        result = runner.invoke(main, ["policy-template", "-o", out_file])
+        assert result.exit_code == 0
+        data = json.loads(Path(out_file).read_text())
+        assert "rules" in data
+        assert len(data["rules"]) > 0
+        assert all("id" in r and "action" in r for r in data["rules"])
+
+
+def test_policy_has_credentials_filter():
+    from agent_bom.models import (
+        Agent, AgentType, BlastRadius, MCPServer, MCPTool, Package, Severity, Vulnerability,
+    )
+    from agent_bom.policy import evaluate_policy
+
+    vuln = Vulnerability(id="CVE-2024-1111", summary="Critical", severity=Severity.CRITICAL)
+    pkg = Package(name="express", version="4.18.2", ecosystem="npm")
+    server = MCPServer(name="no-creds-server", command="node", env={})
+    agent = Agent(name="agent", agent_type=AgentType.CUSTOM, config_path="/tmp")
+    br = BlastRadius(
+        vulnerability=vuln, package=pkg,
+        affected_servers=[server], affected_agents=[agent],
+        exposed_credentials=[],  # no credentials
+        exposed_tools=[],
+    )
+    br.calculate_risk_score()
+
+    # Rule requires has_credentials — should NOT match since no creds
+    policy = {
+        "name": "test",
+        "rules": [{"id": "cred-only", "severity_gte": "CRITICAL", "has_credentials": True, "action": "fail"}],
+    }
+    result = evaluate_policy(policy, [br])
+    assert result["passed"]  # no match because no credentials
+
+
+# ─── SPDX 3.0 Tests ──────────────────────────────────────────────────────────
+
+
+def test_spdx_output_structure(sample_report):
+    from agent_bom.output import to_spdx
+
+    data = to_spdx(sample_report)
+    assert data["spdxVersion"] == "SPDX-3.0"
+    assert data["dataLicense"] == "CC0-1.0"
+    assert "elements" in data
+    assert "relationships" in data
+    assert "creationInfo" in data
+    assert len(data["elements"]) > 0
+
+
+def test_spdx_has_vulnerability_elements(sample_report):
+    from agent_bom.output import to_spdx
+
+    data = to_spdx(sample_report)
+    vuln_elements = [e for e in data["elements"] if e.get("type") == "security/Vulnerability"]
+    assert len(vuln_elements) >= 1
+    assert vuln_elements[0]["name"] == "CVE-2024-1234"
+
+
+def test_spdx_export_file(sample_report, tmp_path):
+    from agent_bom.output import export_spdx
+
+    out = tmp_path / "test.spdx.json"
+    export_spdx(sample_report, str(out))
+    data = json.loads(out.read_text())
+    assert data["spdxVersion"] == "SPDX-3.0"
+
+
+def test_cli_scan_has_spdx_format():
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "spdx" in result.output
+
+
+def test_cli_scan_has_policy_flag():
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "--policy" in result.output
