@@ -56,6 +56,11 @@ pip install -e .
 | `agent-bom scan` | Auto-discover agents + extract deps + scan for CVEs |
 | `agent-bom scan --inventory agents.json` | Scan agents from a manual inventory file |
 | `agent-bom scan --sbom syft-output.json --inventory agents.json` | Ingest existing Syft/Grype/Trivy CycloneDX or SPDX SBOM |
+| `agent-bom scan --image nginx:1.25` | Scan a Docker image for packages + CVEs (uses Syft if available, Docker CLI fallback) |
+| `agent-bom scan --image myapp:latest --image redis:7` | Scan multiple Docker images in one run |
+| `agent-bom scan --k8s` | Discover container images from a Kubernetes cluster (default namespace) |
+| `agent-bom scan --k8s --all-namespaces` | Scan all K8s namespaces |
+| `agent-bom scan --k8s --namespace prod --context my-cluster` | Scan a specific namespace and context |
 | `agent-bom scan --project /path` | Scan a specific project directory |
 | `agent-bom scan --config-dir /path` | Scan a custom agent config directory |
 | `agent-bom scan --transitive` | Include transitive dependencies |
@@ -106,6 +111,43 @@ agent-bom scan --project /path/to/my-project
 ```
 
 agent-bom looks for config files at known paths for each supported client (see `agent-bom where` for locations). It parses the `mcpServers` block in each config to find MCP server definitions.
+
+### Mode 3: Docker image scanning
+
+Scan container images directly — no MCP config needed:
+
+```bash
+# Scan a single image (uses Syft if installed, Docker CLI otherwise)
+agent-bom scan --image nginx:1.25
+
+# Scan multiple images
+agent-bom scan --image myapp:latest --image redis:7 --image postgres:16
+
+# Combine with vulnerability enrichment and CI gate
+agent-bom scan --image myapp:latest --enrich --fail-on-severity high -f sarif -o results.sarif
+```
+
+Each image becomes a synthetic agent entry in the report. Syft is preferred because it extracts packages from all layers without running the container. The Docker CLI fallback creates a temporary container, exports the filesystem, and scans manifest files (`dist-info`, `node_modules/*/package.json`, `/var/lib/dpkg/status`).
+
+### Mode 4: Kubernetes pod discovery
+
+Enumerate running container images from a cluster and scan each:
+
+```bash
+# Scan pods in the default namespace
+agent-bom scan --k8s
+
+# Scan all namespaces
+agent-bom scan --k8s --all-namespaces
+
+# Target a specific namespace and context
+agent-bom scan --k8s --namespace production --context my-prod-cluster
+
+# Full pipeline: discover K8s images → scan → SARIF upload
+agent-bom scan --k8s --all-namespaces --enrich -f sarif -o k8s-aibom.sarif
+```
+
+`--k8s` calls `kubectl get pods -o json`, extracts unique image references from all container specs (including init and ephemeral containers), deduplicates them, and passes each to the image scanner. Combine with `--image` if you also want to include images not yet running in the cluster.
 
 ### Mode 2: Manual inventory
 
@@ -212,6 +254,8 @@ agent-bom validate agents.json   # exits 0 if valid, 1 with clear errors if not
 - **npx / uvx detection** — extracts package names from MCP server command definitions
 - **MCP registry lookup** — resolves packages for 25+ known MCP servers by name when no lock file is present (e.g. `@modelcontextprotocol/server-filesystem`, `mcp-server-git`); updated weekly via automated workflow
 - **SBOM ingestion** — `--sbom sbom.json` accepts existing CycloneDX 1.x or SPDX 2.x/3.0 output from Syft, Grype, Trivy, or cdxgen; integrates into existing pipelines without replacing them
+- **Docker image scanning** — `--image nginx:1.25` extracts packages from container images using Syft (preferred) or Docker CLI filesystem export fallback; repeatable for multiple images in one scan
+- **Kubernetes discovery** — `--k8s` queries `kubectl get pods` to enumerate running container images, then scans each via the Docker image scanner; supports `--namespace`, `--all-namespaces`, and `--context`
 - **Transitive resolution** — recursively resolves nested deps via npm and PyPI registries with proper semver/PEP 440 range handling (`^`, `~`, `>=`, specifier sets)
 - **Vulnerability scanning** — queries [OSV.dev](https://osv.dev) across all ecosystems; GHSA/RUSTSEC aliases automatically mapped to CVE IDs for enrichment
 - **CVSS scoring** — computes numeric CVSS 3.x base scores from vector strings (e.g. `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H → 9.8`), not just labels
@@ -300,8 +344,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for CI/CD, Kubernetes, and remote scanning se
 - [x] Prioritized remediation plan grouped by blast radius impact
 - [x] MCP registry lookup — 25+ known MCP servers resolved to packages by name; weekly automated sync
 - [x] SBOM ingestion — accept Syft/Grype/Trivy CycloneDX or SPDX output as input (`--sbom`)
-- [ ] Docker/container image scanning (`--image`)
-- [ ] Kubernetes pod discovery (`--k8s`)
+- [x] Docker image scanning — extract packages from container images via Syft or Docker CLI (`--image`)
+- [x] Kubernetes pod discovery — enumerate running container images via kubectl and scan each (`--k8s`)
 - [ ] Live MCP server introspection (enumerate tools/resources dynamically)
 
 **Output & policy:**
