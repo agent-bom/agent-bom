@@ -595,3 +595,76 @@ def export_sarif(report: AIBOMReport, output_path: str) -> None:
     """Export report as SARIF 2.1.0 JSON file."""
     data = to_sarif(report)
     Path(output_path).write_text(json.dumps(data, indent=2))
+
+
+# ─── Diff Output ─────────────────────────────────────────────────────────────
+
+
+def print_diff(diff: dict) -> None:
+    """Print a human-readable diff between two scan reports."""
+    summary = diff["summary"]
+    baseline_ts = diff["baseline_generated_at"]
+    current_ts = diff["current_generated_at"]
+
+    console.print(f"\n[bold blue]📊 Scan Diff[/bold blue]  "
+                  f"[dim]{baseline_ts}[/dim] → [dim]{current_ts}[/dim]\n")
+
+    parts = []
+    if summary["new_findings"]:
+        parts.append(f"[red bold]+{summary['new_findings']} new[/red bold]")
+    if summary["resolved_findings"]:
+        parts.append(f"[green bold]-{summary['resolved_findings']} resolved[/green bold]")
+    if summary["unchanged_findings"]:
+        parts.append(f"[dim]{summary['unchanged_findings']} unchanged[/dim]")
+    if summary["new_packages"]:
+        parts.append(f"[yellow]{summary['new_packages']} new package(s)[/yellow]")
+    if summary["removed_packages"]:
+        parts.append(f"[dim]{summary['removed_packages']} removed package(s)[/dim]")
+
+    if parts:
+        console.print("  " + "  •  ".join(parts) + "\n")
+    else:
+        console.print("  [green]No changes since baseline.[/green]\n")
+        return
+
+    severity_styles = {
+        "CRITICAL": "red bold", "HIGH": "red",
+        "MEDIUM": "yellow", "LOW": "dim",
+    }
+
+    if diff["new"]:
+        console.print(f"  [red bold]New findings ({len(diff['new'])}):[/red bold]")
+        for br in diff["new"][:20]:
+            sev = br.get("severity", "UNKNOWN")
+            style = severity_styles.get(sev, "white")
+            kev = " [red bold][KEV][/red bold]" if br.get("is_kev") else ""
+            ai = " [magenta][AI-RISK][/magenta]" if br.get("ai_risk_context") else ""
+            fix = f" → fix: {br['fixed_version']}" if br.get("fixed_version") else " (no fix)"
+            console.print(
+                f"    [+] [{style}]{br.get('vulnerability_id', '?')}[/{style}]  "
+                f"{br.get('package', '?')}  [{sev}]{kev}{ai}[dim]{fix}[/dim]"
+            )
+        if len(diff["new"]) > 20:
+            console.print(f"    [dim]...and {len(diff['new']) - 20} more[/dim]")
+        console.print()
+
+    if diff["resolved"]:
+        console.print(f"  [green]Resolved findings ({len(diff['resolved'])}):[/green]")
+        for br in diff["resolved"][:10]:
+            console.print(
+                f"    [-] [dim]{br.get('vulnerability_id', '?')}  "
+                f"{br.get('package', '?')}[/dim]"
+            )
+        console.print()
+
+    if diff["new_packages"]:
+        console.print(f"  [yellow]New packages added ({len(diff['new_packages'])}):[/yellow]")
+        for pkg in diff["new_packages"][:10]:
+            console.print(f"    [+] [dim]{pkg}[/dim]")
+        console.print()
+
+    if diff["removed_packages"]:
+        console.print(f"  [dim]Packages removed ({len(diff['removed_packages'])}):[/dim]")
+        for pkg in diff["removed_packages"][:10]:
+            console.print(f"    [-] [dim]{pkg}[/dim]")
+        console.print()
