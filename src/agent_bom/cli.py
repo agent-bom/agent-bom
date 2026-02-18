@@ -100,6 +100,11 @@ def main():
 @click.option("--baseline", type=click.Path(exists=True), help="Path to a baseline report JSON to diff against current scan")
 @click.option("--policy", type=click.Path(exists=True), help="Policy file (JSON/YAML) with declarative security rules")
 @click.option("--sbom", "sbom_file", type=click.Path(exists=True), help="Existing SBOM file to ingest (CycloneDX or SPDX JSON from Syft/Grype/Trivy)")
+@click.option("--image", "images", multiple=True, metavar="IMAGE", help="Docker image to scan (e.g. nginx:1.25). Repeatable for multiple images.")
+@click.option("--k8s", is_flag=True, help="Discover container images from a Kubernetes cluster via kubectl")
+@click.option("--namespace", default="default", show_default=True, help="Kubernetes namespace (used with --k8s)")
+@click.option("--all-namespaces", "-A", is_flag=True, help="Scan all Kubernetes namespaces (used with --k8s)")
+@click.option("--context", "k8s_context", default=None, help="kubectl context to use (used with --k8s)")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -120,6 +125,11 @@ def scan(
     baseline: Optional[str],
     policy: Optional[str],
     sbom_file: Optional[str],
+    images: tuple,
+    k8s: bool,
+    namespace: str,
+    all_namespaces: bool,
+    k8s_context: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -212,9 +222,9 @@ def scan(
     else:
         agents = discover_all(project_dir=project)
 
-    if not agents:
+    if not agents and not images and not k8s:
         con.print("\n[yellow]No MCP configurations found.[/yellow]")
-        con.print("  Use --project, --config-dir, or --inventory to specify a target.")
+        con.print("  Use --project, --config-dir, --inventory, --image, or --k8s to specify a target.")
         sys.exit(0)
 
     # Step 1b: Load SBOM packages if provided
@@ -230,6 +240,58 @@ def scan(
         except (FileNotFoundError, ValueError) as e:
             con.print(f"\n  [red]SBOM error: {e}[/red]")
             sys.exit(1)
+
+    # Step 1c: Discover K8s container images (--k8s)
+    if k8s:
+        from agent_bom.k8s import K8sDiscoveryError, discover_images
+        ns_label = "all namespaces" if all_namespaces else f"namespace '{namespace}'"
+        con.print(f"\n[bold blue]Discovering container images from Kubernetes ({ns_label})...[/bold blue]\n")
+        try:
+            k8s_records = discover_images(
+                namespace=namespace,
+                all_namespaces=all_namespaces,
+                context=k8s_context,
+            )
+            if k8s_records:
+                con.print(f"  [green]✓[/green] Found {len(k8s_records)} unique image(s) across pods")
+                extra_images = list(images) + [img for img, _pod, _ctr in k8s_records]
+                images = tuple(dict.fromkeys(extra_images))  # deduplicate, preserve order
+            else:
+                con.print(f"  [dim]  No running pods found in {ns_label}[/dim]")
+        except K8sDiscoveryError as e:
+            con.print(f"\n  [red]K8s discovery error: {e}[/red]")
+            sys.exit(1)
+
+    # Step 1d: Scan Docker images (--image)
+    if images:
+        from agent_bom.image import ImageScanError, scan_image
+        from agent_bom.models import Agent, AgentType, MCPServer, TransportType
+
+        con.print(f"\n[bold blue]Scanning {len(images)} container image(s)...[/bold blue]\n")
+        for image_ref in images:
+            try:
+                img_packages, strategy = scan_image(image_ref)
+                con.print(
+                    f"  [green]✓[/green] {image_ref}: {len(img_packages)} package(s) "
+                    f"[dim](via {strategy})[/dim]"
+                )
+                # Represent the image as a synthetic agent → server
+                server = MCPServer(
+                    name=image_ref,
+                    command="docker",
+                    args=["run", image_ref],
+                    transport=TransportType.STDIO,
+                    packages=img_packages,
+                )
+                image_agent = Agent(
+                    name=f"image:{image_ref}",
+                    agent_type=AgentType.CUSTOM,
+                    config_path=f"docker://{image_ref}",
+                    mcp_servers=[server],
+                )
+                agents.append(image_agent)
+            except ImageScanError as e:
+                con.print(f"  [yellow]⚠[/yellow] {image_ref}: {e}")
 
     # Step 2: Extract packages
     con.print("\n[bold blue]Extracting package dependencies...[/bold blue]\n")

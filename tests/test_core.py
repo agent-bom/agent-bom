@@ -814,3 +814,210 @@ def test_cli_scan_has_sbom_flag():
     runner = CliRunner()
     result = runner.invoke(main, ["scan", "--help"])
     assert "--sbom" in result.output
+
+
+# ─── Image scanning tests ────────────────────────────────────────────────────
+
+
+def test_image_to_purl_simple():
+    from agent_bom.image import image_to_purl
+
+    assert image_to_purl("nginx:1.25") == "pkg:oci/nginx:1.25"
+
+
+def test_image_to_purl_with_registry():
+    from agent_bom.image import image_to_purl
+
+    purl = image_to_purl("ghcr.io/org/app:v1.0.0")
+    assert purl == "pkg:oci/org/app:v1.0.0?repository_url=ghcr.io"
+
+
+def test_image_scan_no_tools(monkeypatch):
+    """scan_image raises ImageScanError when neither syft nor docker is available."""
+    import shutil
+
+    from agent_bom.image import ImageScanError, scan_image
+
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    with pytest.raises(ImageScanError, match="Neither"):
+        scan_image("nginx:latest")
+
+
+def test_scan_with_syft_preferred(monkeypatch):
+    """scan_image uses syft when available, even if docker is also present."""
+    import shutil
+    import subprocess
+
+    from agent_bom.image import scan_image
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
+    # Return a minimal CycloneDX JSON from syft
+    fake_cdx = json.dumps({
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "components": [
+            {"name": "requests", "version": "2.31.0", "purl": "pkg:pypi/requests@2.31.0", "type": "library"}
+        ],
+    })
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 0
+            stdout = fake_cdx
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    packages, strategy = scan_image("myapp:latest")
+    assert strategy == "syft"
+    assert len(packages) == 1
+    assert packages[0].name == "requests"
+    assert packages[0].ecosystem == "pypi"
+
+
+def test_scan_with_syft_error(monkeypatch):
+    """scan_image raises ImageScanError when syft exits non-zero."""
+    import shutil
+    import subprocess
+
+    from agent_bom.image import ImageScanError, scan_image
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/syft" if cmd == "syft" else None)
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = "image not found"
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ImageScanError, match="syft exited"):
+        scan_image("nonexistent:latest")
+
+
+def test_cli_scan_has_image_flag():
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "--image" in result.output
+
+
+def test_cli_scan_has_k8s_flags():
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "--k8s" in result.output
+    assert "--namespace" in result.output
+
+
+# ─── K8s discovery tests ──────────────────────────────────────────────────────
+
+
+def test_k8s_discover_no_kubectl(monkeypatch):
+    """discover_images raises K8sDiscoveryError when kubectl is not available."""
+    import shutil
+
+    from agent_bom.k8s import K8sDiscoveryError, discover_images
+
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    with pytest.raises(K8sDiscoveryError, match="kubectl"):
+        discover_images()
+
+
+def test_k8s_discover_parses_pods(monkeypatch):
+    """discover_images extracts unique image refs from kubectl JSON output."""
+    import shutil
+    import subprocess
+
+    from agent_bom.k8s import discover_images
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
+    fake_pods = {
+        "items": [
+            {
+                "metadata": {"name": "web-pod", "namespace": "default"},
+                "spec": {
+                    "containers": [
+                        {"name": "web", "image": "nginx:1.25"},
+                        {"name": "sidecar", "image": "busybox:latest"},
+                    ],
+                    "initContainers": [
+                        {"name": "init", "image": "nginx:1.25"},  # duplicate — should be skipped
+                    ],
+                },
+            }
+        ]
+    }
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 0
+            stdout = json.dumps(fake_pods)
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    records = discover_images(namespace="default")
+    images = [r[0] for r in records]
+    assert "nginx:1.25" in images
+    assert "busybox:latest" in images
+    assert images.count("nginx:1.25") == 1  # deduplication
+
+
+def test_k8s_discover_kubectl_error(monkeypatch):
+    """discover_images raises K8sDiscoveryError on non-zero kubectl exit."""
+    import shutil
+    import subprocess
+
+    from agent_bom.k8s import K8sDiscoveryError, discover_images
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = "Error from server: connection refused"
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(K8sDiscoveryError, match="kubectl exited"):
+        discover_images()
+
+
+def test_k8s_all_namespaces_flag(monkeypatch):
+    """discover_images includes namespace in pod name when --all-namespaces."""
+    import shutil
+    import subprocess
+
+    from agent_bom.k8s import discover_images
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
+    fake_pods = {
+        "items": [
+            {
+                "metadata": {"name": "my-pod", "namespace": "prod"},
+                "spec": {
+                    "containers": [{"name": "app", "image": "myapp:v2"}],
+                },
+            }
+        ]
+    }
+
+    captured_cmd = []
+
+    def fake_run(cmd, **kwargs):
+        captured_cmd.extend(cmd)
+
+        class R:
+            returncode = 0
+            stdout = json.dumps(fake_pods)
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    records = discover_images(all_namespaces=True)
+    assert "-A" in captured_cmd
+    assert records[0][1] == "prod/my-pod"  # qualified pod name includes namespace
