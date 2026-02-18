@@ -17,10 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
+      # ubuntu-latest ships Python 3.x; this script uses stdlib only
+      # (json, urllib.request, pathlib, datetime) — no setup-python needed
 
       - name: Fetch official MCP server list
         id: fetch
