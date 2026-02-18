@@ -55,6 +55,7 @@ pip install -e .
 |---------|-------------|
 | `agent-bom scan` | Auto-discover agents + extract deps + scan for CVEs |
 | `agent-bom scan --inventory agents.json` | Scan agents from a manual inventory file |
+| `agent-bom scan --sbom syft-output.json --inventory agents.json` | Ingest existing Syft/Grype/Trivy CycloneDX or SPDX SBOM |
 | `agent-bom scan --project /path` | Scan a specific project directory |
 | `agent-bom scan --config-dir /path` | Scan a custom agent config directory |
 | `agent-bom scan --transitive` | Include transitive dependencies |
@@ -210,6 +211,7 @@ agent-bom validate agents.json   # exits 0 if valid, 1 with clear errors if not
 - **Multi-ecosystem** — npm, pip, Go, Cargo (lock files + manifest files)
 - **npx / uvx detection** — extracts package names from MCP server command definitions
 - **MCP registry lookup** — resolves packages for 25+ known MCP servers by name when no lock file is present (e.g. `@modelcontextprotocol/server-filesystem`, `mcp-server-git`); updated weekly via automated workflow
+- **SBOM ingestion** — `--sbom sbom.json` accepts existing CycloneDX 1.x or SPDX 2.x/3.0 output from Syft, Grype, Trivy, or cdxgen; integrates into existing pipelines without replacing them
 - **Transitive resolution** — recursively resolves nested deps via npm and PyPI registries with proper semver/PEP 440 range handling (`^`, `~`, `>=`, specifier sets)
 - **Vulnerability scanning** — queries [OSV.dev](https://osv.dev) across all ecosystems; GHSA/RUSTSEC aliases automatically mapped to CVE IDs for enrichment
 - **CVSS scoring** — computes numeric CVSS 3.x base scores from vector strings (e.g. `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H → 9.8`), not just labels
@@ -297,7 +299,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for CI/CD, Kubernetes, and remote scanning se
 - [x] All CVEs enriched via NVD with proper rate limiting (not capped at 10)
 - [x] Prioritized remediation plan grouped by blast radius impact
 - [x] MCP registry lookup — 25+ known MCP servers resolved to packages by name; weekly automated sync
-- [ ] SBOM ingestion — accept Syft/Grype CycloneDX output as input (`--sbom`)
+- [x] SBOM ingestion — accept Syft/Grype/Trivy CycloneDX or SPDX output as input (`--sbom`)
 - [ ] Docker/container image scanning (`--image`)
 - [ ] Kubernetes pod discovery (`--k8s`)
 - [ ] Live MCP server introspection (enumerate tools/resources dynamically)
@@ -317,10 +319,31 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for CI/CD, Kubernetes, and remote scanning se
 
 ```yaml
 # .github/workflows/ai-bom.yml
+
+# Option A: standalone scan
 - name: Generate AI-BOM
   run: |
     pip install agent-bom
     agent-bom scan --inventory agents.json --fail-on-severity high -f sarif -o results.sarif
+
+- name: Upload to GitHub Security
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+
+# Option B: pipe Syft SBOM into agent-bom (for teams already using Syft/Grype)
+- name: Generate SBOM with Syft
+  uses: anchore/sbom-action@v0
+  with:
+    image: myapp:latest
+    format: cyclonedx-json
+    output-file: sbom.cdx.json
+
+- name: Scan SBOM for AI agent blast radius
+  run: |
+    pip install agent-bom
+    agent-bom scan --sbom sbom.cdx.json --inventory agents.json \
+      --enrich --fail-on-kev -f sarif -o results.sarif
 
 - name: Upload to GitHub Security
   uses: github/codeql-action/upload-sarif@v3

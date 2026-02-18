@@ -727,3 +727,90 @@ def test_zed_format_parsed(tmp_path):
     assert len(servers) == 1
     assert servers[0].name == "postgres"
     assert servers[0].command == "npx"
+
+
+# ─── SBOM Ingestion Tests ─────────────────────────────────────────────────────
+
+
+def test_parse_cyclonedx_components():
+    from agent_bom.sbom import parse_cyclonedx
+
+    data = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "components": [
+            {"name": "express", "version": "4.18.2",
+             "purl": "pkg:npm/express@4.18.2", "type": "library"},
+            {"name": "requests", "version": "2.28.0",
+             "purl": "pkg:pypi/requests@2.28.0", "type": "library"},
+        ],
+    }
+    packages = parse_cyclonedx(data)
+    assert len(packages) == 2
+    assert packages[0].name == "express"
+    assert packages[0].ecosystem == "npm"
+    assert packages[1].name == "requests"
+    assert packages[1].ecosystem == "pypi"
+
+
+def test_parse_spdx2_packages():
+    from agent_bom.sbom import parse_spdx
+
+    data = {
+        "spdxVersion": "SPDX-2.3",
+        "packages": [
+            {
+                "name": "lodash",
+                "versionInfo": "4.17.21",
+                "externalRefs": [
+                    {"referenceType": "purl", "referenceLocator": "pkg:npm/lodash@4.17.21"},
+                ],
+            }
+        ],
+    }
+    packages = parse_spdx(data)
+    assert len(packages) == 1
+    assert packages[0].name == "lodash"
+    assert packages[0].version == "4.17.21"
+    assert packages[0].ecosystem == "npm"
+
+
+def test_load_sbom_cyclonedx(tmp_path):
+    import json as _json
+
+    from agent_bom.sbom import load_sbom
+
+    sbom = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "components": [
+            {"name": "flask", "version": "2.3.0",
+             "purl": "pkg:pypi/flask@2.3.0", "type": "library"},
+        ],
+    }
+    p = tmp_path / "sbom.json"
+    p.write_text(_json.dumps(sbom))
+    packages, fmt = load_sbom(str(p))
+    assert fmt == "cyclonedx"
+    assert len(packages) == 1
+    assert packages[0].name == "flask"
+
+
+def test_load_sbom_unknown_format(tmp_path):
+    import json as _json
+
+    from agent_bom.sbom import load_sbom
+
+    p = tmp_path / "bad.json"
+    p.write_text(_json.dumps({"random": "data"}))
+    try:
+        load_sbom(str(p))
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Unrecognised" in str(e)
+
+
+def test_cli_scan_has_sbom_flag():
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert "--sbom" in result.output
