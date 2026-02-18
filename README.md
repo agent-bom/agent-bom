@@ -68,16 +68,19 @@ pip install -e .
 | `agent-bom scan -f json -o report.json` | Export JSON report |
 | `agent-bom scan -f cyclonedx -o bom.cdx.json` | Export CycloneDX 1.6 BOM |
 | `agent-bom scan -f sarif -o bom.sarif` | Export SARIF for GitHub Security tab |
+| `agent-bom scan -f spdx -o bom.spdx.json` | Export SPDX 3.0 AI-BOM JSON-LD |
 | `agent-bom scan -f text` | Plain text output (for grep/awk) |
 | `agent-bom scan -f json -o - \| jq .` | Pipe clean JSON to stdout |
 | `agent-bom scan -q --fail-on-severity high` | CI gate — exit 1 if high+ vulns found |
 | `agent-bom scan --fail-on-kev` | CI gate — exit 1 if any CISA KEV finding (use with `--enrich`) |
 | `agent-bom scan --fail-if-ai-risk` | CI gate — exit 1 if AI framework has vulns + exposed creds |
+| `agent-bom scan --policy policy.json` | CI gate — declarative policy rules (fail/warn conditions) |
 | `agent-bom check express@4.18.2 -e npm` | Pre-install check — is this package safe? |
 | `agent-bom check "npx @scope/mcp-server"` | Check a package before running with npx |
 | `agent-bom history` | List saved scan history |
 | `agent-bom diff baseline.json` | Diff latest scan against a baseline |
 | `agent-bom diff baseline.json current.json` | Diff any two report files |
+| `agent-bom policy-template` | Generate a starter `policy.json` with common rules |
 | `agent-bom inventory` | List discovered agents (no vuln scan) |
 | `agent-bom inventory -c config.json` | Inventory a specific config file |
 | `agent-bom validate agents.json` | Validate an inventory file against the schema |
@@ -215,9 +218,10 @@ agent-bom validate agents.json   # exits 0 if valid, 1 with clear errors if not
 - **Remediation plan** — grouped upgrade actions ordered by blast radius impact (agents protected × credentials freed × vulns cleared × KEV/AI flags)
 - **Pre-install safety check** — `agent-bom check express@4.18.2` queries OSV before you run `npx -y`
 - **Scan history** — `--save` persists scans to `~/.agent-bom/history/`; `agent-bom diff` shows new/resolved findings between runs
-- **Policy CI gates** — `--fail-on-severity`, `--fail-on-kev`, `--fail-if-ai-risk` for layered CI enforcement
+- **Policy-as-code** — `--policy policy.json` with declarative rules (severity thresholds, KEV, AI risk, credentials, ecosystem filters); `agent-bom policy-template` generates a starter file
+- **Policy CI gates** — `--fail-on-severity`, `--fail-on-kev`, `--fail-if-ai-risk` for quick inline enforcement
 - **Credential detection** — flags MCP servers exposing API keys, tokens, and secrets in env vars
-- **Output formats** — rich console, JSON, CycloneDX 1.6, SARIF 2.1, plain text
+- **Output formats** — rich console (with severity chart), JSON, CycloneDX 1.6, SARIF 2.1, SPDX 3.0, plain text
 - **CI/CD ready** — `--quiet`, stdout piping (`-o -`), multiple exit code policies
 
 ---
@@ -293,10 +297,11 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for CI/CD, Kubernetes, and remote scanning se
 
 **Output & policy:**
 - [x] SARIF 2.1 output for GitHub Security tab
+- [x] SPDX 3.0 AI-BOM JSON-LD output (`-f spdx`)
 - [x] Policy CI gates: `--fail-on-kev`, `--fail-if-ai-risk`, `--fail-on-severity`
+- [x] Policy-as-code: declarative rules with `--policy policy.json` + `agent-bom policy-template`
 - [x] Scan history and baseline diffing (`--save`, `--baseline`, `agent-bom diff`)
-- [ ] SPDX 3.0 output (AI-BOM profile)
-- [ ] Policy-as-code file ("no DB-credential server may have critical vulns")
+- [x] Severity distribution chart in console output
 - [ ] MITRE ATLAS mapping for AI/ML threats
 
 ---
