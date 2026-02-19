@@ -17,16 +17,14 @@ Requires: pip install agent-bom[ui]  (streamlit + plotly)
 
 from __future__ import annotations
 
-import json
-import os
 import sys
 from pathlib import Path
 
 # ─── Guard: ensure streamlit is available ─────────────────────────────────────
 try:
-    import streamlit as st
     import plotly.express as px  # type: ignore[import]
     import plotly.graph_objects as go  # type: ignore[import]
+    import streamlit as st
 except ImportError:
     print(
         "ERROR: Streamlit and Plotly are required for agent-bom serve.\n"
@@ -78,18 +76,21 @@ def _run_scan(
     gha_path: str | None,
 ) -> tuple[list, list, object]:
     """Run agent-bom scan and return (agents, blast_radii, report)."""
+    import json as _json
+
     from agent_bom.discovery import discover_all
+    from agent_bom.models import Agent, AgentType, AIBOMReport, MCPServer, Package
     from agent_bom.parsers import extract_packages
     from agent_bom.scanners import scan_agents_sync
-    from agent_bom.models import AIBOMReport, Agent, AgentType, MCPServer, Package, TransportType
 
     agents: list[Agent] = []
 
     if inventory:
-        import json as _json
-        with open(inventory) as f:
+        inv_path = Path(inventory).expanduser().resolve()
+        if not inv_path.is_file():
+            raise ValueError(f"Inventory file not found: {inventory}")
+        with open(inv_path) as f:
             data = _json.load(f)
-        from agent_bom.models import MCPTool
         for ad in data.get("agents", []):
             servers = []
             for sd in ad.get("mcp_servers", []):

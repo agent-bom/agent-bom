@@ -195,6 +195,8 @@ def scan_github_actions(repo_path: str) -> tuple[list[Agent], list[str]]:
         ``warnings`` — human-readable strings (credential exposure notes, etc.)
     """
     repo = Path(repo_path).expanduser().resolve()
+    if not repo.is_dir():
+        return [], [f"Not a directory: {repo_path}"]
     workflows_dir = repo / ".github" / "workflows"
 
     if not workflows_dir.is_dir():
