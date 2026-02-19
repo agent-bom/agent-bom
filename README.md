@@ -33,7 +33,7 @@ flowchart TD
         I2["NVD / NIST — CVSS v4 scores"]
         I3["FIRST EPSS — exploit probability"]
         I4["CISA KEV — known exploited vulns"]
-        I5["MCP Registry — 55+ known servers\nwith risk levels + provenance"]
+        I5["MCP Registry — 100 known servers\nwith risk levels + provenance"]
     end
 
     subgraph B["💥 Blast radius engine"]
@@ -70,7 +70,7 @@ flowchart TD
 ### For security and platform teams
 
 - **Continuous AI supply chain visibility** — run in CI/CD, push metrics to Prometheus/Grafana, alert on KEV hits
-- **Policy-as-code** — `--policy policy.json` defines which CVE severities, EPSS thresholds, or credentials block the build
+- **Policy-as-code** — `--policy policy.json` with registry-aware rules: block unverified servers, flag excessive agency (>N tools), enforce risk-level thresholds
 - **SARIF output** — blast radius findings appear directly in GitHub Advanced Security with OWASP codes as properties
 - **Kubernetes-wide** — scan every pod image across all namespaces in one command; metrics scraped by node_exporter
 - **Terraform/IaC** — catch hardcoded API keys and provider CVEs before they reach production
@@ -183,7 +183,7 @@ Tags appear in the console table, in `owasp_tags` in JSON output, and in SARIF `
 
 ---
 
-## MCP Server Registry (55+ servers)
+## MCP Server Registry (100 servers)
 
 agent-bom ships a registry of known MCP servers with provenance, risk level, package metadata, and verification status. Unverified servers in your agent configs trigger a warning.
 
@@ -197,6 +197,15 @@ agent-bom ships a registry of known MCP servers with provenance, risk level, pac
 | Productivity | Notion, Zapier, Twilio, SendGrid |
 | Search & data | Exa, Tavily, Firecrawl, DuckDuckGo, Apify |
 | Observability | Grafana, Datadog |
+
+**Each entry includes:** package name + version pin, ecosystem, risk level (low/medium/high), verified status, tool names (for excessive agency detection), credential env vars (for exposure analysis), license, and source URL.
+
+**Policy integration:** block unverified servers, enforce risk-level ceilings, flag excessive agency:
+```json
+{"id": "no-unverified-high", "unverified_server": true, "severity_gte": "HIGH", "action": "fail"}
+{"id": "warn-excessive-agency", "min_tools": 6, "action": "warn"}
+{"id": "no-high-risk-cve", "registry_risk_gte": "high", "severity_gte": "CRITICAL", "action": "fail"}
+```
 
 Full registry: [`data/mcp-registry.yaml`](https://github.com/agent-bom/agent-bom/blob/main/data/mcp-registry.yaml)
 
@@ -312,7 +321,7 @@ agent-bom api   # http://127.0.0.1:8422  |  /docs for Swagger UI
 | `POST /v1/scan` | Start async scan (returns `job_id`) |
 | `GET /v1/scan/{job_id}` | Poll status + results |
 | `GET /v1/scan/{job_id}/stream` | SSE real-time scan progress |
-| `GET /v1/registry` | Full MCP server registry (55+ entries) |
+| `GET /v1/registry` | Full MCP server registry (100 entries) |
 | `GET /v1/registry/{id}` | Single registry entry |
 | `GET /v1/agents` | Agent discovery without CVE scan |
 
