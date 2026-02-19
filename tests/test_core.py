@@ -1622,3 +1622,108 @@ def test_cli_scan_has_agent_project_flag():
     result = runner.invoke(main, ["scan", "--help"])
     assert result.exit_code == 0
     assert "--agent-project" in result.output
+
+
+# ─── API tests ──────────────────────────────────────────────────────────────
+
+
+def test_cli_api_help():
+    """CLI exposes 'api' subcommand with expected options."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["api", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.output
+    assert "--port" in result.output
+    assert "--reload" in result.output
+    assert "8422" in result.output  # default port shown
+
+
+def test_cli_completions_help():
+    """CLI exposes 'completions' subcommand for bash/zsh/fish."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["completions", "--help"])
+    assert result.exit_code == 0
+    assert "bash" in result.output
+    assert "zsh" in result.output
+    assert "fish" in result.output
+
+
+def test_api_import():
+    """FastAPI server module imports cleanly when fastapi is available."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from agent_bom.api.server import app  # noqa: F401
+    assert app.title == "agent-bom API"
+
+
+def test_api_health_endpoint():
+    """GET /health returns {status: ok}."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app
+    client = TestClient(app)
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+def test_api_version_endpoint():
+    """GET /version returns current version string."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api import server as _srv
+    from agent_bom.api.server import app
+    from agent_bom import __version__
+    client = TestClient(app)
+    resp = client.get("/version")
+    assert resp.status_code == 200
+    assert resp.json()["version"] == __version__
+
+
+def test_api_scan_submit_and_poll():
+    """POST /v1/scan returns 202 with job_id; GET /v1/scan/{id} returns the job."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app
+    client = TestClient(app)
+    # Submit a scan with no targets — completes quickly (done or failed: no agents on CI)
+    resp = client.post("/v1/scan", json={})
+    assert resp.status_code == 202
+    body = resp.json()
+    assert "job_id" in body
+    # All terminal states are valid: TestClient runs tasks synchronously so the job
+    # may already be done/failed by the time we receive the response.
+    assert body["status"] in ("pending", "running", "done", "failed")
+
+    job_id = body["job_id"]
+    poll = client.get(f"/v1/scan/{job_id}")
+    assert poll.status_code == 200
+    assert poll.json()["job_id"] == job_id
+
+
+def test_api_scan_not_found():
+    """GET /v1/scan/{id} with unknown id returns 404."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app
+    client = TestClient(app)
+    resp = client.get("/v1/scan/does-not-exist-12345")
+    assert resp.status_code == 404
+
+
+def test_api_jobs_list():
+    """GET /v1/jobs returns a jobs list."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app
+    client = TestClient(app)
+    resp = client.get("/v1/jobs")
+    assert resp.status_code == 200
+    assert "jobs" in resp.json()
+
+
+def test_cli_main_help_has_api_in_listing():
+    """Main --help lists the api subcommand."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    assert "api" in result.output
