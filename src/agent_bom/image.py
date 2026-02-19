@@ -1,16 +1,20 @@
 """Docker image scanning — extract packages from container images.
 
-Two strategies, tried in order:
+Three strategies, tried in order:
 
-1. **Syft** (preferred): if ``syft`` is on PATH, run:
+1. **Grype** (richest): if ``grype`` is on PATH, run:
+       grype <image> -o json
+   Returns packages + CVEs in a single call — no OSV query needed.
+
+2. **Syft** (packages-only): if ``syft`` is on PATH, run:
        syft <image> -o cyclonedx-json
    and parse the output with the existing CycloneDX parser.
 
-2. **Docker CLI fallback**: if Syft is not available but ``docker`` is:
+3. **Docker CLI fallback**: if neither Grype nor Syft is available but ``docker`` is:
    - ``docker inspect`` to confirm the image exists / get metadata
    - Snapshot the container filesystem via ``docker create`` + ``docker export``
      then scan common package manager manifest files (pip, npm, etc.)
-   - This is a best-effort approach; Syft will always produce richer results.
+   - This is a best-effort approach; Grype/Syft will always produce richer results.
 
 Usage from cli.py::
 
@@ -28,12 +32,121 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from agent_bom.models import Package
+from agent_bom.models import Package, Severity, Vulnerability
 from agent_bom.sbom import parse_cyclonedx
 
 
 class ImageScanError(Exception):
     """Raised when an image cannot be scanned."""
+
+
+# ─── Grype strategy (preferred) ───────────────────────────────────────────────
+
+_GRYPE_TYPE_MAP: dict[str, str] = {
+    "java-archive": "maven",
+    "npm": "npm",
+    "python": "pypi",
+    "go-module": "go",
+    "rust-crate": "cargo",
+    "gem": "gem",
+    "deb": "deb",
+    "rpm": "rpm",
+    "apk": "apk",
+    "dotnet": "nuget",
+    "binary": "binary",
+}
+
+
+def _grype_available() -> bool:
+    return shutil.which("grype") is not None
+
+
+def _scan_with_grype(image_ref: str) -> list[Package]:
+    """Run Grype and return packages with vulnerabilities pre-populated.
+
+    Grype returns packages + CVEs in a single call, covering all ecosystems
+    (npm, cargo, go modules, maven, gems, .NET, deb, rpm, apk, Python).
+    No secondary OSV query is needed for image packages.
+    """
+    try:
+        result = subprocess.run(
+            ["grype", image_ref, "-o", "json", "--quiet"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except FileNotFoundError:
+        raise ImageScanError("grype not found")
+    except subprocess.TimeoutExpired:
+        raise ImageScanError(f"grype timed out scanning {image_ref}")
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise ImageScanError(f"grype exited {result.returncode}: {stderr[:200]}")
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise ImageScanError(f"grype produced invalid JSON: {e}")
+
+    # Build Package objects keyed by (ecosystem, name, version)
+    pkg_map: dict[tuple[str, str, str], Package] = {}
+
+    for match in data.get("matches", []):
+        artifact = match.get("artifact", {})
+        vuln_data = match.get("vulnerability", {})
+
+        raw_type = artifact.get("type", "").lower()
+        ecosystem = _GRYPE_TYPE_MAP.get(raw_type, raw_type or "unknown")
+        name = artifact.get("name", "")
+        version = artifact.get("version", "")
+        if not name or not version:
+            continue
+
+        key = (ecosystem, name, version)
+        if key not in pkg_map:
+            pkg_map[key] = Package(name=name, version=version, ecosystem=ecosystem)
+
+        pkg = pkg_map[key]
+
+        # Build Vulnerability from Grype match
+        vuln_id = vuln_data.get("id", "")
+        if not vuln_id:
+            continue
+
+        raw_sev = vuln_data.get("severity", "unknown").upper()
+        try:
+            severity = Severity[raw_sev]
+        except KeyError:
+            severity = Severity.NONE
+
+        # Extract CVSS score from Grype's cvss array
+        cvss_score: Optional[float] = None
+        for cvss in vuln_data.get("cvss", []):
+            metrics = cvss.get("metrics", {})
+            score = metrics.get("baseScore")
+            if score is not None:
+                cvss_score = float(score)
+                break
+
+        # Fixed version
+        fix_info = vuln_data.get("fix", {})
+        fixed_versions = fix_info.get("versions", [])
+        fixed_version = fixed_versions[0] if fixed_versions else None
+
+        # Avoid duplicating the same CVE on a package
+        if not any(v.id == vuln_id for v in pkg.vulnerabilities):
+            pkg.vulnerabilities.append(
+                Vulnerability(
+                    id=vuln_id,
+                    summary=vuln_data.get("description", ""),
+                    severity=severity,
+                    cvss_score=cvss_score,
+                    fixed_version=fixed_version,
+                )
+            )
+
+    return list(pkg_map.values())
 
 
 # ─── Syft strategy ────────────────────────────────────────────────────────────
@@ -256,7 +369,8 @@ def _scan_with_docker(image_ref: str) -> list[Package]:
 def scan_image(image_ref: str) -> tuple[list[Package], str]:
     """Scan a Docker image and return (packages, strategy_used).
 
-    Tries Syft first, then Docker CLI fallback.
+    Tries Grype first (packages + CVEs in one call), then Syft (packages
+    only, CVEs added by OSV query later), then Docker CLI as a last resort.
 
     Args:
         image_ref: Docker image reference, e.g. ``myapp:latest``,
@@ -264,12 +378,16 @@ def scan_image(image_ref: str) -> tuple[list[Package], str]:
 
     Returns:
         A tuple ``(packages, strategy)`` where strategy is one of
-        ``"syft"``, ``"docker"``.
+        ``"grype"``, ``"syft"``, ``"docker"``.
 
     Raises:
-        ImageScanError: If neither Syft nor Docker CLI is available,
-                        or if the image cannot be found/pulled.
+        ImageScanError: If no scanner is available or the image cannot
+                        be found/pulled.
     """
+    if _grype_available():
+        packages = _scan_with_grype(image_ref)
+        return packages, "grype"
+
     if _syft_available():
         packages = _scan_with_syft(image_ref)
         return packages, "syft"
@@ -279,8 +397,8 @@ def scan_image(image_ref: str) -> tuple[list[Package], str]:
         return packages, "docker"
 
     raise ImageScanError(
-        "Neither 'syft' nor 'docker' found on PATH. "
-        "Install Syft (https://github.com/anchore/syft) or Docker to enable image scanning."
+        "Neither 'grype', 'syft', nor 'docker' found on PATH. "
+        "Install Grype (https://github.com/anchore/grype) to enable image scanning."
     )
 
 

@@ -60,6 +60,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ─── Trust headers middleware ──────────────────────────────────────────────────
+
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.requests import Request as StarletteRequest  # noqa: E402
+
+
+class TrustHeadersMiddleware(BaseHTTPMiddleware):
+    """Add read-only + no-credential-storage trust headers to every response."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["X-Agent-Bom-Read-Only"] = "true"
+        response.headers["X-Agent-Bom-No-Credential-Storage"] = "true"
+        response.headers["X-Agent-Bom-Version"] = __version__
+        return response
+
+
+app.add_middleware(TrustHeadersMiddleware)
+
 # Thread pool for running blocking scan functions without blocking the event loop
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -380,3 +400,39 @@ async def list_jobs() -> dict:
         ],
         "count": len(_jobs),
     }
+
+
+# ─── MCP Registry ─────────────────────────────────────────────────────────────
+
+import functools  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+import yaml  # noqa: E402
+
+
+@functools.lru_cache(maxsize=1)
+def _load_registry() -> list[dict]:
+    """Load the bundled MCP registry YAML (cached after first load)."""
+    registry_path = _Path(__file__).parent.parent.parent.parent / "data" / "mcp-registry.yaml"
+    if not registry_path.exists():
+        return []
+    with open(registry_path) as f:
+        data = yaml.safe_load(f)
+    return data.get("servers", [])
+
+
+@app.get("/v1/registry", tags=["registry"])
+async def list_registry() -> dict:
+    """List all known MCP servers from the agent-bom registry."""
+    servers = _load_registry()
+    return {"servers": servers, "count": len(servers)}
+
+
+@app.get("/v1/registry/{server_id:path}", tags=["registry"])
+async def get_registry_server(server_id: str) -> dict:
+    """Get a single MCP server entry by ID (e.g. 'modelcontextprotocol/filesystem')."""
+    servers = _load_registry()
+    for server in servers:
+        if server.get("id") == server_id:
+            return server
+    raise HTTPException(status_code=404, detail=f"Registry entry '{server_id}' not found")

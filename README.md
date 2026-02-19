@@ -170,6 +170,10 @@ agent-bom scan -f sarif     -o results.sarif            # GitHub Security tab
 agent-bom scan -f spdx      -o bom.spdx.json            # SPDX 3.0 AI-BOM JSON-LD
 agent-bom scan -f prometheus -o metrics.prom             # Prometheus / node_exporter
 
+# Trust & transparency
+agent-bom scan --dry-run                                # show what would be read, exit 0
+agent-bom scan --dry-run --inventory agents.json --enrich  # full access preview
+
 # Dashboard & utilities
 agent-bom serve                                         # Streamlit dashboard (pip install agent-bom[ui])
 agent-bom check express@4.18.2 -e npm                  # pre-install CVE check
@@ -178,6 +182,41 @@ agent-bom inventory                                     # list agents, no CVE sc
 agent-bom validate agents.json                          # validate inventory JSON
 agent-bom where                                         # show config search paths
 ```
+
+---
+
+## Trust & Permissions
+
+agent-bom is **read-only**. It never writes to configs, never executes MCP servers,
+and never stores credential values. See [PERMISSIONS.md](https://github.com/agent-bom/agent-bom/blob/main/PERMISSIONS.md) for the full trust contract.
+
+Use `--dry-run` to preview exactly which files and APIs would be accessed before any scan runs.
+
+Releases are signed via [Sigstore](https://www.sigstore.dev/) — verify with:
+```bash
+cosign verify-blob agent_bom-0.7.0-py3-none-any.whl \
+  --bundle agent_bom-0.7.0-py3-none-any.whl.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp "https://github.com/agent-bom/agent-bom"
+```
+
+---
+
+## OWASP LLM Top 10 Tagging
+
+Every finding in the blast radius analysis is automatically tagged with applicable
+[OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) codes:
+
+| Code | Name | Triggered by |
+|------|------|-------------|
+| **LLM05** | Supply Chain Vulnerabilities | Any package CVE — always tagged |
+| **LLM06** | Sensitive Information Disclosure | Credential env vars exposed alongside vulnerable package |
+| **LLM08** | Excessive Agency | Server with >5 tools + CRITICAL/HIGH severity CVE |
+| **LLM02** | Insecure Output Handling | Tool with shell/exec semantics + any CVE |
+| **LLM07** | System Prompt Leakage | Tool that reads files/prompts + any CVE |
+| **LLM04** | Data and Model Poisoning | AI framework package (torch, transformers, langchain…) + HIGH+ CVE |
+
+Tags appear in the blast radius table (`--format console`), in JSON output (`owasp_tags` field), and in SARIF result properties for GitHub Advanced Security.
 
 ---
 

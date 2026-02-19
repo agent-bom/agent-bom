@@ -130,6 +130,24 @@ export interface AgentsResponse {
   warnings: string[];
 }
 
+export interface RegistryServer {
+  id: string;
+  name: string;
+  publisher: string;
+  verified: boolean;
+  transport: string;
+  risk_level: "low" | "medium" | "high";
+  packages: Array<{ name: string; ecosystem: string }>;
+  source_url: string;
+  description?: string;
+  sigstore_bundle: string | null;
+}
+
+export interface RegistryResponse {
+  servers: RegistryServer[];
+  count: number;
+}
+
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 async function get<T>(path: string): Promise<T> {
@@ -172,6 +190,10 @@ export const api = {
 
   /** Quick agent discovery (no CVE scan) */
   listAgents: () => get<AgentsResponse>("/v1/agents"),
+
+  /** MCP registry catalog */
+  listRegistry: () => get<RegistryResponse>("/v1/registry"),
+  getRegistryServer: (id: string) => get<RegistryServer>(`/v1/registry/${id}`),
 
   /** Connect to SSE stream for real-time progress */
   streamScan: (jobId: string, onMessage: (data: unknown) => void, onDone: () => void) => {

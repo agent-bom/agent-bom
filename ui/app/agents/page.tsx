@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, Agent } from "@/lib/api";
-import { Server, Package, Wrench, Key } from "lucide-react";
+import { Server, Package, Wrench, Key, ShieldCheck, ShieldAlert } from "lucide-react";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -60,10 +60,14 @@ export default function AgentsPage() {
               {agent.mcp_servers.map((srv, j) => (
                 <div key={j} className="bg-zinc-800 border border-zinc-700 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-semibold text-zinc-200">{srv.name}</span>
-                    {srv.transport && (
-                      <span className="text-xs text-zinc-600 font-mono">{srv.transport}</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-semibold text-zinc-200">{srv.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {srv.transport && (
+                        <span className="text-xs text-zinc-600 font-mono">{srv.transport}</span>
+                      )}
+                    </div>
                   </div>
 
                   {srv.command && (

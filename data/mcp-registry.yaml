@@ -1,0 +1,284 @@
+# agent-bom MCP Registry v0
+# A catalog of known MCP servers with provenance and risk metadata.
+# Schema: https://github.com/agent-bom/agent-bom/blob/main/data/mcp-registry.yaml
+#
+# Fields:
+#   id:           Unique identifier (publisher/server-name)
+#   name:         Human-readable display name
+#   publisher:    Organization or individual who maintains the server
+#   verified:     true = manually reviewed by agent-bom team
+#   transport:    stdio | sse | streamable-http
+#   risk_level:   low | medium | high (based on tool capabilities)
+#   packages:     npm/pip/cargo packages the server requires
+#   source_url:   Canonical source repository
+#   sigstore_bundle: Sigstore bundle URL (null until server publishes signed release)
+
+schema_version: "1.0"
+updated_at: "2026-02-19"
+
+servers:
+  # ── Official modelcontextprotocol servers ─────────────────────────────────
+
+  - id: "modelcontextprotocol/filesystem"
+    name: "Filesystem"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "@modelcontextprotocol/server-filesystem"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Read and write local filesystem files. High risk — full file access."
+
+  - id: "modelcontextprotocol/github"
+    name: "GitHub"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-github"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Read GitHub repos, issues, and PRs via GitHub API."
+
+  - id: "modelcontextprotocol/gitlab"
+    name: "GitLab"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-gitlab"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Read GitLab repos, issues, and MRs via GitLab API."
+
+  - id: "modelcontextprotocol/slack"
+    name: "Slack"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-slack"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Read and post Slack messages. Requires SLACK_BOT_TOKEN."
+
+  - id: "modelcontextprotocol/postgres"
+    name: "PostgreSQL"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "@modelcontextprotocol/server-postgres"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Execute SQL queries against a PostgreSQL database. High risk — full DB access."
+
+  - id: "modelcontextprotocol/sqlite"
+    name: "SQLite"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-sqlite"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Execute SQL queries against a local SQLite database."
+
+  - id: "modelcontextprotocol/brave-search"
+    name: "Brave Search"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "@modelcontextprotocol/server-brave-search"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Web search via Brave Search API. Requires BRAVE_API_KEY."
+
+  - id: "modelcontextprotocol/fetch"
+    name: "Fetch"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-fetch"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Fetch arbitrary HTTP URLs. Medium risk — SSRF potential."
+
+  - id: "modelcontextprotocol/memory"
+    name: "Memory"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "@modelcontextprotocol/server-memory"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Persistent in-memory key-value store for agent context."
+
+  - id: "modelcontextprotocol/puppeteer"
+    name: "Puppeteer"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "@modelcontextprotocol/server-puppeteer"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Control a headless Chromium browser. High risk — arbitrary JS execution."
+
+  - id: "modelcontextprotocol/aws-kb-retrieval"
+    name: "AWS Knowledge Base Retrieval"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "@modelcontextprotocol/server-aws-kb-retrieval"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Query AWS Bedrock Knowledge Bases. Requires AWS credentials."
+
+  # ── Anthropic servers ─────────────────────────────────────────────────────
+
+  - id: "anthropic/computer-use"
+    name: "Computer Use"
+    publisher: "Anthropic"
+    verified: true
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "mcp-server-computer-use"
+        ecosystem: pypi
+    source_url: "https://github.com/anthropics/anthropic-quickstarts"
+    sigstore_bundle: null
+    description: "Control mouse, keyboard, and screen. Extremely high risk — full OS access."
+
+  # ── Community / popular servers ───────────────────────────────────────────
+
+  - id: "punkpeye/mcp-server-firecrawl"
+    name: "Firecrawl"
+    publisher: "punkpeye"
+    verified: false
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "mcp-server-firecrawl"
+        ecosystem: npm
+    source_url: "https://github.com/punkpeye/mcp-server-firecrawl"
+    sigstore_bundle: null
+    description: "Web scraping and crawling via Firecrawl API."
+
+  - id: "pierrebrunelle/mcp-server-youtube"
+    name: "YouTube"
+    publisher: "pierrebrunelle"
+    verified: false
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "@pierrebrunelle/mcp-server-youtube"
+        ecosystem: npm
+    source_url: "https://github.com/pierrebrunelle/mcp-server-youtube"
+    sigstore_bundle: null
+    description: "Search and retrieve YouTube video metadata and transcripts."
+
+  - id: "qdrant/mcp-server-qdrant"
+    name: "Qdrant"
+    publisher: "qdrant"
+    verified: true
+    transport: stdio
+    risk_level: medium
+    packages:
+      - name: "mcp-server-qdrant"
+        ecosystem: pypi
+    source_url: "https://github.com/qdrant/mcp-server-qdrant"
+    sigstore_bundle: null
+    description: "Vector database search and storage via Qdrant."
+
+  - id: "neo4j-contrib/mcp-neo4j"
+    name: "Neo4j"
+    publisher: "neo4j-contrib"
+    verified: false
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "mcp-neo4j"
+        ecosystem: npm
+    source_url: "https://github.com/neo4j-contrib/mcp-neo4j"
+    sigstore_bundle: null
+    description: "Query and write Neo4j graph database. Requires DB credentials."
+
+  - id: "stripe/agent-toolkit"
+    name: "Stripe"
+    publisher: "stripe"
+    verified: true
+    transport: stdio
+    risk_level: high
+    packages:
+      - name: "@stripe/agent-toolkit"
+        ecosystem: npm
+    source_url: "https://github.com/stripe/agent-toolkit"
+    sigstore_bundle: null
+    description: "Stripe payment operations. High risk — financial transaction capability."
+
+  - id: "exa-labs/exa-mcp-server"
+    name: "Exa Search"
+    publisher: "exa-labs"
+    verified: false
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "exa-mcp-server"
+        ecosystem: npm
+    source_url: "https://github.com/exa-labs/exa-mcp-server"
+    sigstore_bundle: null
+    description: "AI-native web search via Exa API."
+
+  - id: "tavily/tavily-mcp"
+    name: "Tavily Search"
+    publisher: "tavily"
+    verified: false
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "tavily-mcp"
+        ecosystem: npm
+    source_url: "https://github.com/tavily-ai/tavily-mcp"
+    sigstore_bundle: null
+    description: "Real-time web search optimized for AI agents."
+
+  - id: "modelcontextprotocol/everything"
+    name: "Everything (Demo)"
+    publisher: "modelcontextprotocol"
+    verified: true
+    transport: stdio
+    risk_level: low
+    packages:
+      - name: "@modelcontextprotocol/server-everything"
+        ecosystem: npm
+    source_url: "https://github.com/modelcontextprotocol/servers"
+    sigstore_bundle: null
+    description: "Demo server exposing every MCP primitive for testing."
