@@ -134,6 +134,7 @@ def main():
 @click.option("--agent-project", "agent_projects", multiple=True, type=click.Path(exists=True), metavar="DIR",
               help="Python project using an agent framework (OpenAI Agents SDK, Google ADK, LangChain, AutoGen, "
                    "CrewAI, LlamaIndex, Pydantic AI, smolagents, Semantic Kernel, Haystack). Repeatable.")
+@click.option("--verify-integrity", is_flag=True, help="Verify package integrity (SHA256/SRI) and SLSA provenance against registries")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -165,6 +166,7 @@ def scan(
     tf_dirs: tuple,
     gha_path: Optional[str],
     agent_projects: tuple,
+    verify_integrity: bool,
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -475,6 +477,34 @@ def scan(
     blast_radii = []
     if not no_scan and total_packages > 0:
         blast_radii = scan_agents_sync(agents, enable_enrichment=enrich, nvd_api_key=nvd_api_key)
+
+    # Step 4b: Integrity + provenance verification (optional)
+    if verify_integrity:
+        import asyncio as _asyncio
+        from agent_bom.integrity import check_package_provenance, verify_package_integrity
+        from agent_bom.http_client import create_client as _create_client
+
+        all_pkgs = [pkg for agent in agents for srv in agent.mcp_servers for pkg in srv.packages]
+        unique_pkgs = {f"{p.ecosystem}:{p.name}@{p.version}": p for p in all_pkgs if p.version not in ("latest", "unknown", "")}
+
+        async def _verify_all():
+            async with _create_client(timeout=15.0) as client:
+                for key, pkg in unique_pkgs.items():
+                    integrity = await verify_package_integrity(pkg, client)
+                    if integrity and integrity.get("verified"):
+                        con.print(f"  [green]✓[/green] {pkg.name}@{pkg.version} — integrity verified (SHA256/SRI)")
+                    elif integrity:
+                        con.print(f"  [yellow]⚠[/yellow] {pkg.name}@{pkg.version} — no integrity hash found")
+
+                    provenance = await check_package_provenance(pkg, client)
+                    if provenance and provenance.get("has_provenance"):
+                        con.print(f"  [green]✓[/green] {pkg.name}@{pkg.version} — SLSA provenance attested")
+                    elif provenance:
+                        con.print(f"  [dim]  {pkg.name}@{pkg.version} — no SLSA provenance[/dim]")
+
+        if unique_pkgs:
+            con.print(f"\n[bold blue]🔐 Verifying integrity for {len(unique_pkgs)} package(s)...[/bold blue]\n")
+            _asyncio.run(_verify_all())
 
     # Build report
     report = AIBOMReport(agents=agents, blast_radii=blast_radii)

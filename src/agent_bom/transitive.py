@@ -9,6 +9,7 @@ from typing import Optional
 import httpx
 from rich.console import Console
 
+from agent_bom.http_client import create_client, request_with_retry
 from agent_bom.models import Package
 
 console = Console(stderr=True)
@@ -126,29 +127,34 @@ async def fetch_npm_metadata(
     if cache_key in _npm_cache:
         return _npm_cache[cache_key]
 
-    try:
-        encoded_name = package_name.replace("/", "%2F")
-        is_range = version in ("latest", "") or any(c in version for c in "^~>=<*")
+    encoded_name = package_name.replace("/", "%2F")
+    is_range = version in ("latest", "") or any(c in version for c in "^~>=<*")
 
-        if is_range:
-            # Fetch full package document to resolve the range
-            response = await client.get(f"{NPM_REGISTRY}/{encoded_name}", follow_redirects=True)
-            if response.status_code == 200:
+    if is_range:
+        response = await request_with_retry(
+            client, "GET", f"{NPM_REGISTRY}/{encoded_name}",
+        )
+        if response and response.status_code == 200:
+            try:
                 pkg_data = response.json()
                 resolved = _resolve_npm_version(version, pkg_data)
                 metadata = pkg_data.get("versions", {}).get(resolved)
                 if metadata:
                     _npm_cache[cache_key] = metadata
                     return metadata
-        else:
-            response = await client.get(f"{NPM_REGISTRY}/{encoded_name}/{version}", follow_redirects=True)
-            if response.status_code == 200:
+            except (ValueError, KeyError):
+                pass
+    else:
+        response = await request_with_retry(
+            client, "GET", f"{NPM_REGISTRY}/{encoded_name}/{version}",
+        )
+        if response and response.status_code == 200:
+            try:
                 metadata = response.json()
                 _npm_cache[cache_key] = metadata
                 return metadata
-
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        console.print(f"  [dim yellow]⚠ Failed to fetch npm metadata for {package_name}@{version}: {e}[/dim yellow]")
+            except (ValueError, KeyError):
+                pass
 
     return None
 
@@ -163,34 +169,40 @@ async def fetch_pypi_metadata(
     if cache_key in _pypi_cache:
         return _pypi_cache[cache_key]
 
-    try:
-        is_range = version in ("latest", "unknown", "") or any(c in version for c in "^~>=<*,!")
+    is_range = version in ("latest", "unknown", "") or any(c in version for c in "^~>=<*,!")
 
-        if is_range:
-            # Fetch all releases to resolve the specifier
-            response = await client.get(f"{PYPI_API}/{package_name}/json", follow_redirects=True)
-            if response.status_code == 200:
+    if is_range:
+        response = await request_with_retry(
+            client, "GET", f"{PYPI_API}/{package_name}/json",
+        )
+        if response and response.status_code == 200:
+            try:
                 pkg_data = response.json()
                 releases = pkg_data.get("releases", {})
                 resolved = _resolve_pip_version(version if version not in ("latest", "unknown", "") else "", releases)
                 if resolved and resolved != "unknown":
-                    version_data = await client.get(f"{PYPI_API}/{package_name}/{resolved}/json", follow_redirects=True)
-                    if version_data.status_code == 200:
+                    version_data = await request_with_retry(
+                        client, "GET", f"{PYPI_API}/{package_name}/{resolved}/json",
+                    )
+                    if version_data and version_data.status_code == 200:
                         data = version_data.json()
                         _pypi_cache[cache_key] = data
                         return data
-                # Fallback: return the root package data (latest)
                 _pypi_cache[cache_key] = pkg_data
                 return pkg_data
-        else:
-            response = await client.get(f"{PYPI_API}/{package_name}/{version}/json", follow_redirects=True)
-            if response.status_code == 200:
+            except (ValueError, KeyError):
+                pass
+    else:
+        response = await request_with_retry(
+            client, "GET", f"{PYPI_API}/{package_name}/{version}/json",
+        )
+        if response and response.status_code == 200:
+            try:
                 data = response.json()
                 _pypi_cache[cache_key] = data
                 return data
-
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        console.print(f"  [dim yellow]⚠ Failed to fetch PyPI metadata for {package_name}@{version}: {e}[/dim yellow]")
+            except (ValueError, KeyError):
+                pass
 
     return None
 
@@ -333,7 +345,7 @@ async def resolve_transitive_dependencies(
     """Resolve transitive dependencies for a list of packages."""
     all_transitive = []
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with create_client(timeout=30.0) as client:
         tasks = []
 
         for pkg in packages:

@@ -9,6 +9,7 @@ from typing import Optional
 import httpx
 from rich.console import Console
 
+from agent_bom.http_client import create_client, request_with_retry
 from agent_bom.models import Vulnerability
 
 console = Console(stderr=True)
@@ -34,26 +35,24 @@ async def fetch_nvd_data(cve_id: str, client: httpx.AsyncClient, api_key: Option
     Returns:
         NVD vulnerability data or None if not found
     """
-    try:
-        headers = {}
-        if api_key:
-            headers["apiKey"] = api_key
+    headers = {}
+    if api_key:
+        headers["apiKey"] = api_key
 
-        response = await client.get(
-            NVD_API_URL,
-            params={"cveId": cve_id},
-            headers=headers,
-            timeout=15.0,
-        )
+    response = await request_with_retry(
+        client, "GET", NVD_API_URL,
+        params={"cveId": cve_id},
+        headers=headers,
+    )
 
-        if response.status_code == 200:
+    if response and response.status_code == 200:
+        try:
             data = response.json()
             vulnerabilities = data.get("vulnerabilities", [])
             if vulnerabilities:
                 return vulnerabilities[0].get("cve", {})
-
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        console.print(f"  [dim yellow]NVD fetch failed for {cve_id}: {e}[/dim yellow]")
+        except (ValueError, KeyError) as e:
+            console.print(f"  [dim yellow]NVD parse error for {cve_id}: {e}[/dim yellow]")
 
     return None
 
@@ -74,20 +73,18 @@ async def fetch_epss_scores(cve_ids: list[str], client: httpx.AsyncClient) -> di
     if not cve_ids:
         return {}
 
-    try:
-        # EPSS API accepts comma-separated CVE list
-        cve_param = ",".join(cve_ids[:100])  # Limit to 100 per request
+    # EPSS API accepts comma-separated CVE list
+    cve_param = ",".join(cve_ids[:100])  # Limit to 100 per request
 
-        response = await client.get(
-            EPSS_API_URL,
-            params={"cve": cve_param},
-            timeout=15.0,
-        )
+    response = await request_with_retry(
+        client, "GET", EPSS_API_URL,
+        params={"cve": cve_param},
+    )
 
-        if response.status_code == 200:
+    if response and response.status_code == 200:
+        try:
             data = response.json()
             scores = {}
-
             for item in data.get("data", []):
                 cve = item.get("cve")
                 if cve:
@@ -96,11 +93,9 @@ async def fetch_epss_scores(cve_ids: list[str], client: httpx.AsyncClient) -> di
                         "percentile": float(item.get("percentile", 0.0)),
                         "date": item.get("date"),
                     }
-
             return scores
-
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        console.print(f"  [dim yellow]EPSS fetch failed: {e}[/dim yellow]")
+        except (ValueError, KeyError) as e:
+            console.print(f"  [dim yellow]EPSS parse error: {e}[/dim yellow]")
 
     return {}
 
@@ -125,10 +120,10 @@ async def fetch_cisa_kev_catalog(client: httpx.AsyncClient) -> dict:
         if age.total_seconds() < 86400:  # 24 hours
             return _kev_cache
 
-    try:
-        response = await client.get(CISA_KEV_URL, timeout=30.0)
+    response = await request_with_retry(client, "GET", CISA_KEV_URL)
 
-        if response.status_code == 200:
+    if response and response.status_code == 200:
+        try:
             data = response.json()
             kev_dict = {}
 
@@ -147,9 +142,8 @@ async def fetch_cisa_kev_catalog(client: httpx.AsyncClient) -> dict:
             _kev_cache = kev_dict
             _kev_cache_time = datetime.now()
             return kev_dict
-
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        console.print(f"  [dim yellow]CISA KEV fetch failed: {e}[/dim yellow]")
+        except (ValueError, KeyError) as e:
+            console.print(f"  [dim yellow]CISA KEV parse error: {e}[/dim yellow]")
 
     return {}
 
@@ -209,7 +203,7 @@ async def enrich_vulnerabilities(
 
     enriched_count = 0
 
-    async with httpx.AsyncClient() as client:
+    async with create_client(timeout=30.0) as client:
         # Fetch EPSS scores (batch)
         epss_data = {}
         if enable_epss:
