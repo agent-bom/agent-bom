@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-bom"
-version = "0.4.0"
+version = "0.5.0"
 description = "Generate AI Bill of Materials (AI-BOM) for AI agents, MCP servers, and their dependencies. Map the full trust chain from agent to vulnerability."
 readme = "README.md"
 license = {text = "Apache-2.0"}
