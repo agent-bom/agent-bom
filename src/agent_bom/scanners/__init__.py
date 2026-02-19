@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Optional
 
 import httpx
@@ -49,6 +50,12 @@ ECOSYSTEM_MAP = {
     "nuget": "NuGet",
     "rubygems": "RubyGems",
 }
+
+# Rate limiting: max concurrent API requests + delay between batches
+MAX_CONCURRENT_REQUESTS = 10
+BATCH_DELAY_SECONDS = 0.5  # 500ms between OSV batch calls
+_api_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
 
 # Map CVSS scores to severity
 def cvss_to_severity(score: Optional[float]) -> Severity:
@@ -199,31 +206,36 @@ async def query_osv_batch(packages: list[Package]) -> dict[str, list[dict]]:
 
     results = {}
 
-    # OSV batch API accepts up to 1000 queries
+    # OSV batch API accepts up to 1000 queries; rate-limited to prevent abuse
     batch_size = 1000
     async with httpx.AsyncClient(timeout=30.0) as client:
         for batch_start in range(0, len(queries), batch_size):
             batch = queries[batch_start:batch_start + batch_size]
 
-            try:
-                response = await client.post(
-                    OSV_BATCH_URL,
-                    json={"queries": batch},
-                )
-                response.raise_for_status()
-                data = response.json()
+            async with _api_semaphore:
+                try:
+                    response = await client.post(
+                        OSV_BATCH_URL,
+                        json={"queries": batch},
+                    )
+                    response.raise_for_status()
+                    data = response.json()
 
-                for i, result in enumerate(data.get("results", [])):
-                    vulns = result.get("vulns", [])
-                    if vulns:
-                        actual_idx = batch_start + i
-                        pkg = pkg_index.get(actual_idx)
-                        if pkg:
-                            key = f"{pkg.ecosystem}:{pkg.name}@{pkg.version}"
-                            results[key] = vulns
+                    for i, result in enumerate(data.get("results", [])):
+                        vulns = result.get("vulns", [])
+                        if vulns:
+                            actual_idx = batch_start + i
+                            pkg = pkg_index.get(actual_idx)
+                            if pkg:
+                                key = f"{pkg.ecosystem}:{pkg.name}@{pkg.version}"
+                                results[key] = vulns
 
-            except httpx.HTTPError as e:
-                console.print(f"  [red]✗[/red] OSV API error: {e}")
+                except httpx.HTTPError as e:
+                    console.print(f"  [red]✗[/red] OSV API error: {e}")
+
+            # Rate limit: delay between batches to avoid overwhelming upstream APIs
+            if batch_start + batch_size < len(queries):
+                await asyncio.sleep(BATCH_DELAY_SECONDS)
 
     return results
 
