@@ -269,6 +269,13 @@ def push_to_gateway(
     Raises:
         PushgatewayError: If the HTTP push fails
     """
+    # Enforce http/https only — reject file://, ftp://, etc.
+    parsed_scheme = gateway_url.split("://", 1)[0].lower()
+    if parsed_scheme not in ("http", "https"):
+        raise PushgatewayError(
+            f"Pushgateway URL must use http:// or https://, got: {gateway_url!r}"
+        )
+
     text = to_prometheus(report, blast_radii)
 
     url = gateway_url.rstrip("/") + f"/metrics/job/{job}"
@@ -284,7 +291,8 @@ def push_to_gateway(
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # nosec B310 — URL scheme restricted to http/https above
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             if resp.status not in (200, 202):
                 raise PushgatewayError(
                     f"Pushgateway returned HTTP {resp.status}"
