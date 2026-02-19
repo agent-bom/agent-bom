@@ -65,13 +65,24 @@ def _make_console(quiet: bool = False, output_format: str = "console") -> Consol
     return Console()
 
 
-@click.group()
-@click.version_option(version=__version__, prog_name="agent-bom")
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=__version__, prog_name="agent-bom", message="agent-bom %(version)s")
 def main():
-    """agent-bom: Generate AI Bill of Materials for AI agents and MCP servers.
+    """agent-bom — AI Bill of Materials for agents, MCP servers, containers & IaC.
 
-    Maps the full trust chain from agent → MCP server → packages → vulnerabilities,
-    with blast radius analysis showing which agents are affected when a package is compromised.
+    \b
+    Maps the full trust chain: agent → MCP server → packages → CVEs → blast radius.
+
+    \b
+    Quick start:
+      agent-bom scan                        auto-discover local agents
+      agent-bom scan -f html -o report.html open dashboard
+      agent-bom scan --enrich               add NVD CVSS + EPSS + CISA KEV
+      agent-bom api                         start REST API (port 8422)
+      agent-bom serve                       Streamlit dashboard (port 8501)
+
+    \b
+    Docs:  https://github.com/agent-bom/agent-bom
     """
     pass
 
@@ -1019,6 +1030,97 @@ def serve_cmd(port: int, host: str, inventory: Optional[str]):
         subprocess.run(cmd, env=env, check=False)
     except KeyboardInterrupt:
         pass
+
+
+@main.command("api")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Host to bind to (use 0.0.0.0 for LAN access)")
+@click.option("--port", default=8422, show_default=True, help="Port to listen on")
+@click.option("--reload", is_flag=True, help="Auto-reload on code changes (development mode)")
+@click.option("--workers", default=1, show_default=True, help="Number of worker processes")
+def api_cmd(host: str, port: int, reload: bool, workers: int):
+    """Start the agent-bom REST API server.
+
+    \b
+    Requires:  pip install agent-bom[api]
+
+    \b
+    Endpoints:
+      GET  /docs                   Interactive API docs (Swagger UI)
+      GET  /health                 Liveness probe
+      GET  /version                Version info
+      POST /v1/scan                Start a scan (async, returns job_id)
+      GET  /v1/scan/{job_id}       Poll status + results
+      GET  /v1/scan/{job_id}/stream  SSE real-time progress
+      GET  /v1/agents              Quick agent discovery (no CVE scan)
+      GET  /v1/jobs                List all scan jobs
+
+    \b
+    Usage:
+      agent-bom api                           # local dev: http://127.0.0.1:8422
+      agent-bom api --host 0.0.0.0            # expose on LAN
+      agent-bom api --port 9000               # custom port
+      agent-bom api --reload                  # dev mode
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        click.echo(
+            "ERROR: uvicorn is required for `agent-bom api`.\n"
+            "Install it with:  pip install 'agent-bom[api]'",
+            err=True,
+        )
+        sys.exit(1)
+
+    from agent_bom import __version__ as _ver
+
+    click.echo(f"  agent-bom API v{_ver}")
+    click.echo(f"  Listening on http://{host}:{port}")
+    click.echo(f"  Docs:         http://{host}:{port}/docs")
+    click.echo("  Press Ctrl+C to stop.\n")
+
+    uvicorn.run(
+        "agent_bom.api.server:app",
+        host=host,
+        port=port,
+        reload=reload,
+        workers=1 if reload else workers,
+        log_level="info",
+    )
+
+
+@main.command("completions")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completions_cmd(shell: str):
+    """Print shell completion script.
+
+    \b
+    Setup:
+      bash:  eval "$(agent-bom completions bash)"
+      zsh:   eval "$(agent-bom completions zsh)"
+      fish:  agent-bom completions fish | source
+
+    \b
+    Permanent setup (bash):
+      agent-bom completions bash >> ~/.bashrc
+
+    Permanent setup (zsh):
+      agent-bom completions zsh >> ~/.zshrc
+    """
+    import os as _os
+    import subprocess as _sp
+
+    env = {**_os.environ, "_AGENT_BOM_COMPLETE": f"{shell}_source"}
+    try:
+        result = _sp.run(["agent-bom"], env=env, capture_output=True, text=True)
+        click.echo(result.stdout, nl=False)
+    except Exception as exc:  # noqa: BLE001
+        # Fallback: print activation instructions
+        if shell == "bash":
+            click.echo('eval "$(_AGENT_BOM_COMPLETE=bash_source agent-bom)"')
+        elif shell == "zsh":
+            click.echo('eval "$(_AGENT_BOM_COMPLETE=zsh_source agent-bom)"')
+        elif shell == "fish":
+            click.echo('eval (env _AGENT_BOM_COMPLETE=fish_source agent-bom)')
 
 
 if __name__ == "__main__":
