@@ -1516,3 +1516,109 @@ def test_cli_serve_fails_without_streamlit(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", mock_import)
     result = runner.invoke(main, ["serve"])
     assert result.exit_code != 0 or "streamlit" in (result.output + str(result.exception)).lower()
+
+
+# ─── Python agent framework scanner tests ─────────────────────────────────────
+
+def test_python_agents_detects_openai_agents_sdk(tmp_path):
+    """Detects openai-agents from requirements.txt and Agent() definition."""
+    (tmp_path / "requirements.txt").write_text("openai-agents==0.0.11\nopenai>=1.0\n")
+    (tmp_path / "agent.py").write_text(
+        "from agents import Agent, function_tool\n\n"
+        "@function_tool\ndef search_web(query: str): ...\n\n"
+        "agent = Agent(name='support-bot', tools=[search_web], model='gpt-4o')\n"
+    )
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    assert any(a.name == "openai-agents:support-bot" for a in agents)
+    agent = next(a for a in agents if "support-bot" in a.name)
+    server = agent.mcp_servers[0]
+    tool_names = [t.name for t in server.tools]
+    assert "search_web" in tool_names or "gpt-4o" in tool_names
+    assert any(p.name == "openai-agents" for p in server.packages)
+
+
+def test_python_agents_detects_google_adk(tmp_path):
+    """Detects google-adk from pyproject.toml."""
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\ndependencies = [\n  \"google-adk>=0.3.0\",\n]\n"
+    )
+    (tmp_path / "main.py").write_text(
+        "from google.adk.agents import Agent\n"
+        "agent = Agent(name='researcher', tools=[])\n"
+    )
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    assert len(agents) >= 1
+    assert any("google-adk" in a.name or "researcher" in a.name for a in agents)
+
+
+def test_python_agents_detects_langchain(tmp_path):
+    """Detects langchain from requirements and import."""
+    (tmp_path / "requirements.txt").write_text("langchain==0.2.16\nlangchain-openai==0.1.9\n")
+    (tmp_path / "chain.py").write_text(
+        "from langchain.agents import AgentExecutor\n"
+        "from langchain.agents import create_openai_tools_agent\n"
+        "agent = AgentExecutor(name='qa-agent', tools=[], agent=None)\n"
+    )
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    assert len(agents) >= 1
+    pkgs = [p.name for a in agents for s in a.mcp_servers for p in s.packages]
+    assert "langchain" in pkgs
+
+
+def test_python_agents_extracts_credential_refs(tmp_path):
+    """Flags env var references that look like credentials."""
+    (tmp_path / "requirements.txt").write_text("openai-agents==0.0.11\n")
+    (tmp_path / "agent.py").write_text(
+        "import os\nfrom agents import Agent\n"
+        "key = os.environ.get('OPENAI_API_KEY')\n"
+        "agent = Agent(name='my-bot', tools=[])\n"
+    )
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    assert len(agents) >= 1
+    creds = {k for a in agents for s in a.mcp_servers for k in s.env}
+    assert "OPENAI_API_KEY" in creds
+    assert any("OPENAI_API_KEY" in w for w in warnings)
+
+
+def test_python_agents_no_framework_returns_empty(tmp_path):
+    """Returns empty when no agent framework is present."""
+    (tmp_path / "requirements.txt").write_text("requests==2.31.0\nflask==3.0.0\n")
+    (tmp_path / "app.py").write_text("import requests\nprint('hello')\n")
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    assert agents == []
+
+
+def test_python_agents_invalid_dir():
+    """Returns error warning for nonexistent directory."""
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents("/nonexistent/path/xyz")
+    assert agents == []
+    assert len(warnings) == 1
+    assert "Not a directory" in warnings[0]
+
+
+def test_python_agents_synthetic_entry_when_no_def(tmp_path):
+    """Creates synthetic agent entry when framework in requirements but no Agent() found."""
+    (tmp_path / "requirements.txt").write_text("crewai==0.51.0\n")
+    (tmp_path / "tasks.py").write_text(
+        "from crewai import Task\ntask = Task(description='do research')\n"
+    )
+    from agent_bom.python_agents import scan_python_agents
+    agents, warnings = scan_python_agents(str(tmp_path))
+    # Should create a synthetic entry for crewai
+    assert len(agents) >= 1
+    pkgs = [p.name for a in agents for s in a.mcp_servers for p in s.packages]
+    assert "crewai" in pkgs
+
+
+def test_cli_scan_has_agent_project_flag():
+    """CLI scan command exposes --agent-project flag."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert result.exit_code == 0
+    assert "--agent-project" in result.output

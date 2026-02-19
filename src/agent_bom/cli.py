@@ -118,6 +118,9 @@ def main():
               help="Terraform directory to scan for AI resources, providers, and hardcoded secrets. Repeatable.")
 @click.option("--gha", "gha_path", type=click.Path(exists=True), metavar="REPO",
               help="Repository root to scan GitHub Actions workflows for AI usage and credential exposure.")
+@click.option("--agent-project", "agent_projects", multiple=True, type=click.Path(exists=True), metavar="DIR",
+              help="Python project using an agent framework (OpenAI Agents SDK, Google ADK, LangChain, AutoGen, "
+                   "CrewAI, LlamaIndex, Pydantic AI, smolagents, Semantic Kernel, Haystack). Repeatable.")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -147,6 +150,7 @@ def scan(
     otel_endpoint: Optional[str],
     tf_dirs: tuple,
     gha_path: Optional[str],
+    agent_projects: tuple,
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -239,11 +243,11 @@ def scan(
     else:
         agents = discover_all(project_dir=project)
 
-    if not agents and not images and not k8s and not tf_dirs and not gha_path:
+    if not agents and not images and not k8s and not tf_dirs and not gha_path and not agent_projects:
         con.print("\n[yellow]No MCP configurations found.[/yellow]")
         con.print(
             "  Use --project, --config-dir, --inventory, --image, --k8s, "
-            "--tf-dir, or --gha to specify a target."
+            "--tf-dir, --gha, or --agent-project to specify a target."
         )
         sys.exit(0)
 
@@ -349,6 +353,25 @@ def scan(
             agents.extend(gha_agents)
         else:
             con.print("  [dim]  No AI-using workflows found[/dim]")
+
+    # Step 1g: Python agent framework scan (--agent-project)
+    if agent_projects:
+        from agent_bom.python_agents import scan_python_agents
+        for ap in agent_projects:
+            con.print(f"\n[bold blue]Scanning Python agent project: {ap}...[/bold blue]\n")
+            ap_agents, ap_warnings = scan_python_agents(ap)
+            for w in ap_warnings:
+                con.print(f"  [yellow]⚠[/yellow] {w}")
+            if ap_agents:
+                tool_count = sum(len(s.tools) for a in ap_agents for s in a.mcp_servers)
+                pkg_count = sum(len(s.packages) for a in ap_agents for s in a.mcp_servers)
+                con.print(
+                    f"  [green]✓[/green] {len(ap_agents)} agent(s) found, "
+                    f"{tool_count} tool(s), {pkg_count} package(s) to scan"
+                )
+                agents.extend(ap_agents)
+            else:
+                con.print("  [dim]  No agent framework usage detected[/dim]")
 
     # Step 2: Extract packages
     con.print("\n[bold blue]Extracting package dependencies...[/bold blue]\n")

@@ -99,6 +99,8 @@ pip install -e .
 | `agent-bom scan --tf-dir /path/to/terraform` | Scan Terraform dir for AI resources (Bedrock, Vertex AI, Azure OpenAI), provider CVEs, and hardcoded secrets |
 | `agent-bom scan --tf-dir infra/prod --tf-dir infra/staging` | Scan multiple Terraform workspaces |
 | `agent-bom scan --gha /path/to/repo` | Scan GitHub Actions workflows for AI API usage and exposed credentials |
+| `agent-bom scan --agent-project /path/to/project` | Scan a Python agent project (OpenAI Agents SDK, Google ADK, LangChain, AutoGen, CrewAI, LlamaIndex, Pydantic AI, smolagents, Semantic Kernel, Haystack) — extracts agent definitions, tools, credential refs, and package versions for CVE scanning |
+| `agent-bom scan --agent-project . --agent-project ../other-agent` | Scan multiple Python agent projects in one run |
 | `agent-bom serve` | Launch interactive Streamlit dashboard (requires `pip install agent-bom[ui]`) |
 | `agent-bom serve --port 8502 --inventory agents.json` | Serve dashboard on custom port with pre-loaded inventory |
 | `agent-bom scan --project /path` | Scan a specific project directory |
