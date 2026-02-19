@@ -10,6 +10,7 @@ import httpx
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from agent_bom.http_client import create_client, request_with_retry
 from agent_bom.models import Agent, BlastRadius, MCPServer, Package, Severity, Vulnerability
 from agent_bom.owasp import tag_blast_radius
 
@@ -206,34 +207,37 @@ async def query_osv_batch(packages: list[Package]) -> dict[str, list[dict]]:
 
     results = {}
 
-    # OSV batch API accepts up to 1000 queries; rate-limited to prevent abuse
+    # OSV batch API accepts up to 1000 queries; rate-limited with retries
     batch_size = 1000
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with create_client(timeout=30.0) as client:
         for batch_start in range(0, len(queries), batch_size):
             batch = queries[batch_start:batch_start + batch_size]
 
             async with _api_semaphore:
-                try:
-                    response = await client.post(
-                        OSV_BATCH_URL,
-                        json={"queries": batch},
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+                response = await request_with_retry(
+                    client, "POST", OSV_BATCH_URL,
+                    json={"queries": batch},
+                )
 
-                    for i, result in enumerate(data.get("results", [])):
-                        vulns = result.get("vulns", [])
-                        if vulns:
-                            actual_idx = batch_start + i
-                            pkg = pkg_index.get(actual_idx)
-                            if pkg:
-                                key = f"{pkg.ecosystem}:{pkg.name}@{pkg.version}"
-                                results[key] = vulns
+                if response and response.status_code == 200:
+                    try:
+                        data = response.json()
+                        for i, result in enumerate(data.get("results", [])):
+                            vulns = result.get("vulns", [])
+                            if vulns:
+                                actual_idx = batch_start + i
+                                pkg = pkg_index.get(actual_idx)
+                                if pkg:
+                                    key = f"{pkg.ecosystem}:{pkg.name}@{pkg.version}"
+                                    results[key] = vulns
+                    except (ValueError, KeyError) as e:
+                        console.print(f"  [red]✗[/red] OSV response parse error: {e}")
+                elif response:
+                    console.print(f"  [red]✗[/red] OSV API error: HTTP {response.status_code}")
+                else:
+                    console.print("  [red]✗[/red] OSV API unreachable after retries")
 
-                except httpx.HTTPError as e:
-                    console.print(f"  [red]✗[/red] OSV API error: {e}")
-
-            # Rate limit: delay between batches to avoid overwhelming upstream APIs
+            # Rate limit: delay between batches
             if batch_start + batch_size < len(queries):
                 await asyncio.sleep(BATCH_DELAY_SECONDS)
 

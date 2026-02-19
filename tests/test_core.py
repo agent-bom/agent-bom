@@ -1853,3 +1853,75 @@ def test_registry_endpoint():
     # Registry has at least the official modelcontextprotocol servers
     ids = [s["id"] for s in body["servers"]]
     assert "modelcontextprotocol/filesystem" in ids
+
+
+# ── Resilient HTTP client tests ──────────────────────────────────────
+
+def test_http_client_create():
+    """create_client returns an httpx.AsyncClient with retry transport."""
+    from agent_bom.http_client import create_client
+    import httpx
+    client = create_client(timeout=10.0)
+    assert isinstance(client, httpx.AsyncClient)
+    # Cleanup
+    import asyncio
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(client.aclose())
+
+
+def test_http_client_retry_constants():
+    """Retry configuration constants are sensible."""
+    from agent_bom.http_client import MAX_RETRIES, INITIAL_BACKOFF, RETRYABLE_STATUS_CODES
+    assert MAX_RETRIES >= 2
+    assert INITIAL_BACKOFF >= 0.5
+    assert 429 in RETRYABLE_STATUS_CODES
+    assert 503 in RETRYABLE_STATUS_CODES
+
+
+# ── Integrity module tests ──────────────────────────────────────
+
+def test_integrity_module_imports():
+    """integrity.py module imports without error and exposes expected API."""
+    from agent_bom.integrity import (
+        verify_package_integrity,
+        verify_npm_integrity,
+        verify_pypi_integrity,
+        check_package_provenance,
+        check_npm_provenance,
+        check_pypi_provenance,
+    )
+    # All should be async functions
+    import asyncio
+    assert asyncio.iscoroutinefunction(verify_package_integrity)
+    assert asyncio.iscoroutinefunction(check_package_provenance)
+
+
+def test_cli_scan_has_verify_integrity_flag():
+    """The scan command accepts --verify-integrity."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--help"])
+    assert result.exit_code == 0
+    assert "--verify-integrity" in result.output
+
+
+def test_credential_redaction_in_discovery():
+    """sanitize_env_vars is applied when parsing MCP configs — secrets are redacted."""
+    from agent_bom.discovery import parse_mcp_config
+    config = {
+        "mcpServers": {
+            "test-server": {
+                "command": "npx",
+                "args": ["-y", "@test/server"],
+                "env": {
+                    "API_KEY": "sk-super-secret-value",
+                    "OPENAI_API_TOKEN": "sk-proj-abc123",
+                    "NORMAL_VAR": "not-a-secret",
+                }
+            }
+        }
+    }
+    servers = parse_mcp_config(config, "/tmp/test.json")
+    assert len(servers) == 1
+    env = servers[0].env
+    assert env["API_KEY"] == "***REDACTED***"
+    assert env["OPENAI_API_TOKEN"] == "***REDACTED***"
+    assert env["NORMAL_VAR"] == "not-a-secret"

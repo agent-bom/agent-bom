@@ -8,6 +8,7 @@ from typing import Optional
 import httpx
 from rich.console import Console
 
+from agent_bom.http_client import create_client, request_with_retry
 from agent_bom.models import Package
 
 console = Console(stderr=True)
@@ -17,25 +18,27 @@ PYPI_API = "https://pypi.org/pypi"
 
 
 async def resolve_npm_version(package_name: str, client: httpx.AsyncClient) -> Optional[str]:
-    try:
-        encoded_name = package_name.replace("/", "%2F")
-        response = await client.get(f"{NPM_REGISTRY}/{encoded_name}/latest", follow_redirects=True)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("version")
-    except (httpx.HTTPError, KeyError, ValueError):
-        pass
+    encoded_name = package_name.replace("/", "%2F")
+    response = await request_with_retry(
+        client, "GET", f"{NPM_REGISTRY}/{encoded_name}/latest",
+    )
+    if response and response.status_code == 200:
+        try:
+            return response.json().get("version")
+        except (ValueError, KeyError):
+            pass
     return None
 
 
 async def resolve_pypi_version(package_name: str, client: httpx.AsyncClient) -> Optional[str]:
-    try:
-        response = await client.get(f"{PYPI_API}/{package_name}/json", follow_redirects=True)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("info", {}).get("version")
-    except (httpx.HTTPError, KeyError, ValueError):
-        pass
+    response = await request_with_retry(
+        client, "GET", f"{PYPI_API}/{package_name}/json",
+    )
+    if response and response.status_code == 200:
+        try:
+            return response.json().get("info", {}).get("version")
+        except (ValueError, KeyError):
+            pass
     return None
 
 
@@ -59,7 +62,7 @@ async def resolve_all_versions(packages: list[Package]) -> int:
     if not unresolved:
         return 0
     resolved_count = 0
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with create_client(timeout=15.0) as client:
         tasks = [resolve_package_version(pkg, client) for pkg in unresolved]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i, result in enumerate(results):
