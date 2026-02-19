@@ -145,6 +145,8 @@ class MCPServer:
     config_path: Optional[str] = None  # Where this server was discovered
     working_dir: Optional[str] = None  # Server's working directory
     mcp_version: Optional[str] = None  # MCP protocol version (e.g. "2024-11-05")
+    registry_verified: bool = False  # True if found in agent-bom MCP registry
+    registry_id: Optional[str] = None  # Registry entry ID, e.g. "modelcontextprotocol/filesystem"
 
     @property
     def vulnerable_packages(self) -> list[Package]:
@@ -221,6 +223,7 @@ class BlastRadius:
     exposed_tools: list[MCPTool]  # Tools accessible through compromised path
     risk_score: float = 0.0  # 0-10
     ai_risk_context: Optional[str] = None  # AI-native risk explanation when relevant
+    owasp_tags: list[str] = field(default_factory=list)  # OWASP LLM Top 10 codes, e.g. ["LLM05", "LLM06"]
 
     def calculate_risk_score(self) -> float:
         """Calculate contextual risk score based on blast radius."""

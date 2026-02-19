@@ -255,7 +255,7 @@ def empty_report():
 
 def test_version_sync():
     from agent_bom import __version__
-    assert __version__ == "0.5.0"
+    assert __version__ == "0.7.0"
 
 
 def test_report_version_matches():
@@ -844,13 +844,14 @@ def test_image_scan_no_tools(monkeypatch):
 
 
 def test_scan_with_syft_preferred(monkeypatch):
-    """scan_image uses syft when available, even if docker is also present."""
+    """scan_image uses syft when grype is absent but syft is present."""
     import shutil
     import subprocess
 
     from agent_bom.image import scan_image
 
-    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+    # Grype not available → falls through to syft
+    monkeypatch.setattr(shutil, "which", lambda cmd: None if cmd == "grype" else "/usr/bin/" + cmd)
 
     # Return a minimal CycloneDX JSON from syft
     fake_cdx = json.dumps({
@@ -1727,3 +1728,128 @@ def test_cli_main_help_has_api_in_listing():
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "api" in result.output
+
+
+# ─── v0.7.0 tests: Grype, OWASP, trust signals, registry ─────────────────────
+
+
+def test_grype_scan_mock(monkeypatch, tmp_path):
+    """Grype scanner parses JSON output into Package objects with pre-populated vulns."""
+    import json, subprocess, shutil
+    from agent_bom.image import _scan_with_grype
+
+    grype_output = {
+        "matches": [
+            {
+                "artifact": {"name": "requests", "version": "2.28.0", "type": "python"},
+                "vulnerability": {
+                    "id": "CVE-2023-32681",
+                    "severity": "Medium",
+                    "description": "Proxy auth header leak",
+                    "cvss": [{"metrics": {"baseScore": 6.1}}],
+                    "fix": {"versions": ["2.31.0"]},
+                },
+            }
+        ]
+    }
+
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 0
+            stdout = json.dumps(grype_output)
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/grype" if x == "grype" else None)
+
+    pkgs = _scan_with_grype("python:3.11")
+    assert len(pkgs) == 1
+    assert pkgs[0].name == "requests"
+    assert pkgs[0].ecosystem == "pypi"
+    assert len(pkgs[0].vulnerabilities) == 1
+    vuln = pkgs[0].vulnerabilities[0]
+    assert vuln.id == "CVE-2023-32681"
+    assert vuln.cvss_score == 6.1
+    assert vuln.fixed_version == "2.31.0"
+
+
+def test_owasp_lm05_always_present(sample_report):
+    """Any blast radius entry must always include LLM05 (Supply Chain)."""
+    from agent_bom.owasp import tag_blast_radius
+    br = sample_report.blast_radii[0]
+    br.owasp_tags = tag_blast_radius(br)
+    assert "LLM05" in br.owasp_tags
+
+
+def test_owasp_lm06_credential_exposure(sample_report):
+    """Credential exposure triggers LLM06 tagging."""
+    from agent_bom.owasp import tag_blast_radius
+    br = sample_report.blast_radii[0]
+    br.exposed_credentials = ["OPENAI_API_KEY"]
+    br.owasp_tags = tag_blast_radius(br)
+    assert "LLM06" in br.owasp_tags
+
+
+def test_owasp_lm08_excessive_agency(sample_report):
+    """More than 5 exposed tools + HIGH/CRITICAL severity triggers LLM08."""
+    from agent_bom.owasp import tag_blast_radius
+    from agent_bom.models import MCPTool, Severity
+    br = sample_report.blast_radii[0]
+    br.vulnerability.severity = Severity.CRITICAL
+    br.exposed_tools = [MCPTool(name=f"tool_{i}", description="") for i in range(6)]
+    br.owasp_tags = tag_blast_radius(br)
+    assert "LLM08" in br.owasp_tags
+
+
+def test_owasp_tags_in_json_output(sample_report):
+    """to_json() includes 'owasp_tags' field in each blast radius entry."""
+    from agent_bom.owasp import tag_blast_radius
+    from agent_bom.output import to_json
+    # Populate tags first (normally done by scanner)
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_blast_radius(br)
+    data = to_json(sample_report)
+    assert "blast_radius" in data
+    for entry in data["blast_radius"]:
+        assert "owasp_tags" in entry
+        assert isinstance(entry["owasp_tags"], list)
+
+
+def test_dry_run_exits_zero(tmp_path):
+    """--dry-run prints access plan and exits 0 without scanning."""
+    runner = CliRunner()
+    inv = tmp_path / "inv.json"
+    inv.write_text('{"agents": []}')
+    result = runner.invoke(main, ["scan", "--dry-run", "--inventory", str(inv)])
+    assert result.exit_code == 0
+    assert "Dry-run" in result.output or "dry-run" in result.output or "Would" in result.output
+
+
+def test_api_trust_headers():
+    """Every API response includes X-Agent-Bom-Read-Only trust header."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app
+    client = TestClient(app)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.headers.get("x-agent-bom-read-only") == "true"
+    assert response.headers.get("x-agent-bom-no-credential-storage") == "true"
+
+
+def test_registry_endpoint():
+    """GET /v1/registry returns a non-empty list of MCP servers."""
+    pytest.importorskip("fastapi", reason="fastapi not installed")
+    from fastapi.testclient import TestClient
+    from agent_bom.api.server import app, _load_registry
+    _load_registry.cache_clear()  # clear cache so fresh load from disk
+    client = TestClient(app)
+    response = client.get("/v1/registry")
+    assert response.status_code == 200
+    body = response.json()
+    assert "servers" in body
+    assert body["count"] == len(body["servers"])
+    # Registry has at least the official modelcontextprotocol servers
+    ids = [s["id"] for s in body["servers"]]
+    assert "modelcontextprotocol/filesystem" in ids

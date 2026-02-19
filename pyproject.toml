@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-bom"
-version = "0.5.0"
+version = "0.7.0"
 description = "AI Bill of Materials — map the full trust chain from AI agents and MCP servers to CVEs, credentials, and blast radius."
 readme = "README.md"
 license = {text = "Apache-2.0"}

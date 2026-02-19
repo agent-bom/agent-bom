@@ -129,6 +129,7 @@ def print_blast_radius(report: AIBOMReport) -> None:
     table.add_column("KEV", width=4, justify="center")
     table.add_column("Agents", width=7, justify="center")
     table.add_column("Creds", width=6, justify="center")
+    table.add_column("OWASP", width=18)
     table.add_column("Fix", width=15)
 
     severity_colors = {
@@ -152,6 +153,8 @@ def print_blast_radius(report: AIBOMReport) -> None:
         # KEV indicator
         kev_display = "[red bold]🔥[/red bold]" if br.vulnerability.is_kev else "—"
 
+        owasp_display = "[dim]" + " ".join(br.owasp_tags) + "[/dim]" if br.owasp_tags else "—"
+
         table.add_row(
             f"[{sev_style}]{br.risk_score:.1f}[/{sev_style}]",
             br.vulnerability.id,
@@ -161,6 +164,7 @@ def print_blast_radius(report: AIBOMReport) -> None:
             kev_display,
             str(len(br.affected_agents)),
             str(len(br.exposed_credentials)),
+            owasp_display,
             fix,
         )
 
@@ -354,6 +358,7 @@ def to_json(report: AIBOMReport) -> dict:
                 "exposed_tools": [t.name for t in br.exposed_tools],
                 "fixed_version": br.vulnerability.fixed_version,
                 "ai_risk_context": br.ai_risk_context,
+                "owasp_tags": br.owasp_tags,
             }
             for br in report.blast_radii
         ],
@@ -555,7 +560,7 @@ def to_sarif(report: AIBOMReport) -> dict:
 
         config_path = br.affected_agents[0].config_path if br.affected_agents else "unknown"
 
-        result = {
+        result: dict = {
             "ruleId": rule_id,
             "level": level,
             "message": {"text": message_text},
@@ -570,6 +575,12 @@ def to_sarif(report: AIBOMReport) -> dict:
                 }
             ],
         }
+        if br.owasp_tags:
+            result["properties"] = {
+                "owasp_tags": br.owasp_tags,
+                "blast_score": br.risk_score,
+                "exposed_credentials": br.exposed_credentials,
+            }
         results.append(result)
 
     return {

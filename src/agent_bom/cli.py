@@ -102,6 +102,7 @@ def main():
               help="Prometheus Pushgateway URL to push metrics after scan (e.g. http://localhost:9091)")
 @click.option("--otel-endpoint", "otel_endpoint", default=None, metavar="URL",
               help="OpenTelemetry OTLP/HTTP collector endpoint (e.g. http://localhost:4318). Requires pip install agent-bom[otel]")
+@click.option("--dry-run", is_flag=True, help="Show what files and APIs would be accessed without scanning, then exit 0")
 @click.option("--no-scan", is_flag=True, help="Skip vulnerability scanning (inventory only)")
 @click.option("--no-tree", is_flag=True, help="Skip dependency tree output")
 @click.option("--transitive", is_flag=True, help="Resolve transitive dependencies for npx/uvx packages")
@@ -138,6 +139,7 @@ def scan(
     inventory: Optional[str],
     output: Optional[str],
     output_format: str,
+    dry_run: bool,
     no_scan: bool,
     no_tree: bool,
     transitive: bool,
@@ -180,6 +182,46 @@ def scan(
     _out.console = con
 
     con.print(BANNER, style="bold blue")
+
+    # ── Dry-run: show access plan without scanning ────────────────────────────
+    if dry_run:
+        con.print("\n[bold cyan]🔍 Dry-run — access plan (no files read, no queries made)[/bold cyan]\n")
+        reads = []
+        if inventory:
+            reads.append(f"  [green]Would read:[/green]   {inventory}")
+        if project:
+            reads.append(f"  [green]Would read:[/green]   {project}  (agent configs)")
+        if config_dir:
+            reads.append(f"  [green]Would read:[/green]   {config_dir}  (config directory)")
+        if not reads:
+            import platform
+            if platform.system() == "Darwin":
+                reads.append("  [green]Would read:[/green]   ~/Library/Application Support/Claude/claude_desktop_config.json")
+                reads.append("  [green]Would read:[/green]   ~/.cursor/mcp.json")
+                reads.append("  [green]Would read:[/green]   ~/.codeium/windsurf/mcp_config.json")
+            else:
+                reads.append("  [green]Would read:[/green]   ~/.config/claude/claude_desktop_config.json")
+        for tf_dir in tf_dirs:
+            reads.append(f"  [green]Would read:[/green]   {tf_dir}  (Terraform .tf files)")
+        for ap in agent_projects:
+            reads.append(f"  [green]Would read:[/green]   {ap}  (Python agent project)")
+        if gha_path:
+            reads.append(f"  [green]Would read:[/green]   {gha_path}/.github/workflows/  (GitHub Actions)")
+        for img in images:
+            reads.append(f"  [green]Would scan:[/green]   docker image {img}  (via grype → syft → docker)")
+        for line in reads:
+            con.print(line)
+        con.print()
+        con.print("  [dim]Would query:[/dim]  https://api.osv.dev/v1/querybatch  (batch CVE lookup, no auth required)")
+        if enrich:
+            con.print("  [dim]Would query:[/dim]  https://services.nvd.nist.gov/rest/json/cves/2.0  (CVSS v4)")
+            con.print("  [dim]Would query:[/dim]  https://api.first.org/data/v1/epss  (exploit probability)")
+            con.print("  [dim]Would query:[/dim]  https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json")
+        con.print()
+        con.print("  [bold green]✓ agent-bom is read-only.[/bold green] It never writes to configs or executes MCP servers.")
+        con.print("  [bold green]✓ Credential values are never read.[/bold green] Only env var names appear in reports.")
+        con.print("  See [link=https://github.com/agent-bom/agent-bom/blob/main/PERMISSIONS.md]PERMISSIONS.md[/link] for the full trust contract.")
+        return
 
     # Step 1: Discovery
     if inventory:
