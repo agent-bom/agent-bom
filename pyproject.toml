@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-bom"
-version = "0.10.1"
+version = "0.11.1"
 description = "AI Bill of Materials (AI-BOM) generator — CVE scanning, blast radius, enterprise remediation plans, OWASP LLM Top 10 + MITRE ATLAS threat mapping, and MCP registry for AI agents."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -53,6 +53,28 @@ ui = [
     "streamlit>=1.35",
     "plotly>=5.20",
     "pandas>=2.0",
+]
+aws = ["boto3>=1.34"]
+azure = [
+    "azure-identity>=1.16",
+    "azure-mgmt-resource>=23.0",
+    "azure-ai-projects>=1.0.0b3",
+    "azure-mgmt-appcontainers>=3.0",
+]
+gcp = [
+    "google-cloud-aiplatform>=1.48",
+    "google-auth>=2.27",
+]
+databricks = ["databricks-sdk>=0.20"]
+snowflake = ["snowflake-connector-python>=3.6"]
+nebius = ["nebius>=0.1"]
+cloud = [
+    "agent-bom[aws]",
+    "agent-bom[azure]",
+    "agent-bom[gcp]",
+    "agent-bom[databricks]",
+    "agent-bom[snowflake]",
+    "agent-bom[nebius]",
 ]
 dev = [
     "pytest>=7.0",
