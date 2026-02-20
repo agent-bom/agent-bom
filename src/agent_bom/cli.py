@@ -97,7 +97,7 @@ def main():
 @click.option("--output", "-o", type=str, help="Output file path (use '-' for stdout)")
 @click.option(
     "--format", "-f", "output_format",
-    type=click.Choice(["console", "json", "cyclonedx", "sarif", "spdx", "text", "html", "prometheus"]),
+    type=click.Choice(["console", "json", "cyclonedx", "sarif", "spdx", "text", "html", "prometheus", "graph"]),
     default="console",
     help="Output format",
 )
@@ -137,6 +137,23 @@ def main():
               help="Python project using an agent framework (OpenAI Agents SDK, Google ADK, LangChain, AutoGen, "
                    "CrewAI, LlamaIndex, Pydantic AI, smolagents, Semantic Kernel, Haystack). Repeatable.")
 @click.option("--verify-integrity", is_flag=True, help="Verify package integrity (SHA256/SRI) and SLSA provenance against registries")
+@click.option("--aws", is_flag=True, help="Discover AI agents from AWS Bedrock, Lambda, and ECS")
+@click.option("--aws-region", default=None, metavar="REGION", help="AWS region (default: AWS_DEFAULT_REGION)")
+@click.option("--aws-profile", default=None, metavar="PROFILE", help="AWS credential profile")
+@click.option("--azure", "azure_flag", is_flag=True, help="Discover agents from Azure AI Foundry and Container Apps")
+@click.option("--azure-subscription", default=None, metavar="ID", envvar="AZURE_SUBSCRIPTION_ID", help="Azure subscription ID")
+@click.option("--gcp", "gcp_flag", is_flag=True, help="Discover agents from Google Cloud Vertex AI and Cloud Run")
+@click.option("--gcp-project", default=None, metavar="PROJECT", envvar="GOOGLE_CLOUD_PROJECT", help="GCP project ID")
+@click.option("--databricks", "databricks_flag", is_flag=True, help="Discover agents from Databricks clusters and model serving")
+@click.option("--snowflake", "snowflake_flag", is_flag=True, help="Discover Cortex agents and Snowpark apps from Snowflake")
+@click.option("--nebius", "nebius_flag", is_flag=True, help="Discover AI workloads from Nebius GPU cloud")
+@click.option("--nebius-api-key", default=None, envvar="NEBIUS_API_KEY", metavar="KEY", help="Nebius API key")
+@click.option("--nebius-project-id", default=None, envvar="NEBIUS_PROJECT_ID", metavar="ID", help="Nebius project ID")
+@click.option("--aws-include-lambda", is_flag=True, help="Discover standalone Lambda functions (used with --aws)")
+@click.option("--aws-include-eks", is_flag=True, help="Discover EKS cluster workloads via kubectl (used with --aws)")
+@click.option("--aws-include-step-functions", is_flag=True, help="Discover Step Functions workflows (used with --aws)")
+@click.option("--aws-include-ec2", is_flag=True, help="Discover EC2 instances by tag (used with --aws)")
+@click.option("--aws-ec2-tag", default=None, metavar="KEY=VALUE", help="EC2 tag filter for --aws-include-ec2 (e.g. 'Environment=ai-prod')")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -169,6 +186,23 @@ def scan(
     gha_path: Optional[str],
     agent_projects: tuple,
     verify_integrity: bool,
+    aws: bool,
+    aws_region: Optional[str],
+    aws_profile: Optional[str],
+    azure_flag: bool,
+    azure_subscription: Optional[str],
+    gcp_flag: bool,
+    gcp_project: Optional[str],
+    databricks_flag: bool,
+    snowflake_flag: bool,
+    nebius_flag: bool,
+    nebius_api_key: Optional[str],
+    nebius_project_id: Optional[str],
+    aws_include_lambda: bool,
+    aws_include_eks: bool,
+    aws_include_step_functions: bool,
+    aws_include_ec2: bool,
+    aws_ec2_tag: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -214,6 +248,26 @@ def scan(
             reads.append(f"  [green]Would read:[/green]   {gha_path}/.github/workflows/  (GitHub Actions)")
         for img in images:
             reads.append(f"  [green]Would scan:[/green]   docker image {img}  (via grype → syft → docker)")
+        if aws:
+            reads.append(f"  [green]Would query:[/green]  AWS Bedrock/Lambda/ECS APIs ({aws_region or 'default region'})")
+            if aws_include_lambda:
+                reads.append(f"  [green]Would query:[/green]  AWS Lambda ListFunctions API ({aws_region or 'default region'})")
+            if aws_include_eks:
+                reads.append("  [green]Would query:[/green]  AWS EKS ListClusters + kubectl pod discovery")
+            if aws_include_step_functions:
+                reads.append("  [green]Would query:[/green]  AWS Step Functions ListStateMachines API")
+            if aws_include_ec2:
+                reads.append("  [green]Would query:[/green]  AWS EC2 DescribeInstances API (tag-filtered)")
+        if azure_flag:
+            reads.append("  [green]Would query:[/green]  Azure AI Foundry/Container Apps APIs")
+        if gcp_flag:
+            reads.append(f"  [green]Would query:[/green]  GCP Vertex AI/Cloud Run APIs ({gcp_project or 'default project'})")
+        if databricks_flag:
+            reads.append("  [green]Would query:[/green]  Databricks Clusters/Libraries APIs")
+        if snowflake_flag:
+            reads.append("  [green]Would query:[/green]  Snowflake Cortex Agents/MCP Servers/Search/Snowpark/Streamlit APIs")
+        if nebius_flag:
+            reads.append("  [green]Would query:[/green]  Nebius K8s/Container APIs")
         for line in reads:
             con.print(line)
         con.print()
@@ -301,11 +355,13 @@ def scan(
     else:
         agents = discover_all(project_dir=project)
 
-    if not agents and not images and not k8s and not tf_dirs and not gha_path and not agent_projects:
+    any_cloud = aws or azure_flag or gcp_flag or databricks_flag or snowflake_flag or nebius_flag
+    if not agents and not images and not k8s and not tf_dirs and not gha_path and not agent_projects and not any_cloud:
         con.print("\n[yellow]No MCP configurations found.[/yellow]")
         con.print(
             "  Use --project, --config-dir, --inventory, --image, --k8s, "
-            "--tf-dir, --gha, or --agent-project to specify a target."
+            "--tf-dir, --gha, --agent-project, --aws, --azure, --gcp, "
+            "--databricks, --snowflake, or --nebius to specify a target."
         )
         sys.exit(0)
 
@@ -431,6 +487,52 @@ def scan(
             else:
                 con.print("  [dim]  No agent framework usage detected[/dim]")
 
+    # Step 1h: Cloud provider discovery
+    cloud_providers: list[tuple[str, dict]] = []
+    if aws:
+        aws_kwargs: dict = {"region": aws_region, "profile": aws_profile}
+        if aws_include_lambda:
+            aws_kwargs["include_lambda"] = True
+        if aws_include_eks:
+            aws_kwargs["include_eks"] = True
+        if aws_include_step_functions:
+            aws_kwargs["include_step_functions"] = True
+        if aws_include_ec2:
+            aws_kwargs["include_ec2"] = True
+            if aws_ec2_tag and "=" in aws_ec2_tag:
+                k, v = aws_ec2_tag.split("=", 1)
+                aws_kwargs["ec2_tag_filter"] = {k: v}
+        cloud_providers.append(("aws", aws_kwargs))
+    if azure_flag:
+        cloud_providers.append(("azure", {"subscription_id": azure_subscription}))
+    if gcp_flag:
+        cloud_providers.append(("gcp", {"project_id": gcp_project}))
+    if databricks_flag:
+        cloud_providers.append(("databricks", {}))
+    if snowflake_flag:
+        cloud_providers.append(("snowflake", {}))
+    if nebius_flag:
+        cloud_providers.append(("nebius", {"api_key": nebius_api_key, "project_id": nebius_project_id}))
+
+    for provider_name, provider_kwargs in cloud_providers:
+        from agent_bom.cloud import CloudDiscoveryError, discover_from_provider
+        con.print(f"\n[bold blue]Discovering agents from {provider_name.upper()}...[/bold blue]\n")
+        try:
+            cloud_agents, cloud_warnings = discover_from_provider(provider_name, **provider_kwargs)
+            for w in cloud_warnings:
+                con.print(f"  [yellow]⚠[/yellow] {w}")
+            if cloud_agents:
+                pkg_count = sum(a.total_packages for a in cloud_agents)
+                con.print(
+                    f"  [green]✓[/green] {len(cloud_agents)} agent(s) discovered, "
+                    f"{pkg_count} package(s) to scan"
+                )
+                agents.extend(cloud_agents)
+            else:
+                con.print(f"  [dim]  No AI agents found in {provider_name.upper()}[/dim]")
+        except CloudDiscoveryError as exc:
+            con.print(f"\n  [red]{provider_name.upper()} discovery error: {exc}[/red]")
+
     # Step 2: Extract packages
     con.print("\n[bold blue]Extracting package dependencies...[/bold blue]\n")
     if transitive:
@@ -526,6 +628,10 @@ def scan(
             sys.stdout.write(to_html(report, blast_radii))
         elif output_format == "prometheus":
             sys.stdout.write(to_prometheus(report, blast_radii))
+        elif output_format == "graph":
+            from agent_bom.output.graph import build_graph_elements
+            elements = build_graph_elements(report, blast_radii)
+            sys.stdout.write(json.dumps({"elements": elements, "format": "cytoscape"}, indent=2))
         else:
             sys.stdout.write(json.dumps(to_json(report), indent=2))
         sys.stdout.write("\n")
@@ -566,6 +672,13 @@ def scan(
         export_prometheus(report, out_path, blast_radii)
         con.print(f"\n  [green]✓[/green] Prometheus metrics: {out_path}")
         con.print("  [dim]Scrape with node_exporter textfile or push via --push-gateway[/dim]")
+    elif output_format == "graph":
+        from agent_bom.output.graph import build_graph_elements
+        out_path = output or "agent-bom-graph.json"
+        elements = build_graph_elements(report, blast_radii)
+        Path(out_path).write_text(json.dumps({"elements": elements, "format": "cytoscape"}, indent=2))
+        con.print(f"\n  [green]✓[/green] Graph JSON: {out_path}")
+        con.print("  [dim]Cytoscape.js-compatible element list — open with Cytoscape desktop or any JS graph library[/dim]")
     elif output_format == "text" and output:
         Path(output).write_text(_format_text(report, blast_radii))
         con.print(f"\n  [green]✓[/green] Text report: {output}")

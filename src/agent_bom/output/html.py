@@ -87,79 +87,15 @@ def _chart_data(blast_radii: list["BlastRadius"]) -> str:
 
 
 def _cytoscape_elements(report: "AIBOMReport", blast_radii: list["BlastRadius"]) -> str:
-    """Build Cytoscape element list.
+    """Build Cytoscape element list using the shared graph builder.
 
-    Only renders package nodes for VULNERABLE packages — clean packages are
-    omitted so scans of large Docker images (2000+ packages) stay readable.
-    Server nodes carry a package-count badge in their label.
+    Delegates to ``agent_bom.output.graph.build_graph_elements`` which adds
+    provider nodes, CVE nodes, and typed edges on top of the original
+    agent → server → package hierarchy.
     """
-    elements: list[dict] = []
-    vuln_pkg_keys: set[tuple[str, str]] = {
-        (br.package.name, br.package.ecosystem) for br in blast_radii
-    }
+    from agent_bom.output.graph import build_graph_elements
 
-    for agent in report.agents:
-        aid = f"a{id(agent)}"
-        elements.append({"data": {
-            "id": aid,
-            "label": agent.name,
-            "type": "agent",
-            "tip": (
-                f"Agent: {agent.name}\n"
-                f"Type: {agent.agent_type.value}\n"
-                f"Servers: {len(agent.mcp_servers)}"
-            ),
-        }})
-
-        for srv in agent.mcp_servers:
-            sid = f"s{id(srv)}"
-            vuln_count = sum(
-                1 for p in srv.packages
-                if (p.name, p.ecosystem) in vuln_pkg_keys
-            )
-            has_vuln = vuln_count > 0
-            has_cred = srv.has_credentials
-            stype = "server_vuln" if has_vuln else ("server_cred" if has_cred else "server_clean")
-            pkg_note = f"\nPackages: {len(srv.packages)}" + (f"\nVulnerable: {vuln_count}" if vuln_count else "")
-            cinfo = f"\nCredentials: {', '.join(srv.credential_names)}" if has_cred else ""
-            pkg_badge = f" ({len(srv.packages)})"
-
-            elements.append({"data": {
-                "id": sid,
-                "label": srv.name + pkg_badge,
-                "type": stype,
-                "tip": (
-                    f"MCP Server: {srv.name}"
-                    f"{pkg_note}"
-                    f"{cinfo}"
-                ),
-            }})
-            elements.append({"data": {"source": aid, "target": sid}})
-
-            # Only add package nodes for VULNERABLE packages
-            seen_vuln_ids: set[str] = set()
-            for pkg in srv.packages:
-                if (pkg.name, pkg.ecosystem) not in vuln_pkg_keys:
-                    continue
-                pid = f"p{pkg.name}{pkg.ecosystem}"
-                if pid in seen_vuln_ids:
-                    elements.append({"data": {"source": sid, "target": pid}})
-                    continue
-                seen_vuln_ids.add(pid)
-                vc = len(pkg.vulnerabilities)
-                elements.append({"data": {
-                    "id": pid,
-                    "label": f"{pkg.name}\n{pkg.version}",
-                    "type": "pkg_vuln",
-                    "tip": (
-                        f"Package: {pkg.name}\n"
-                        f"Version: {pkg.version}\n"
-                        f"Ecosystem: {pkg.ecosystem}\n"
-                        f"Vulnerabilities: {vc if vc else '(via blast radius)'}"
-                    ),
-                }})
-                elements.append({"data": {"source": sid, "target": pid}})
-
+    elements = build_graph_elements(report, blast_radii, include_cve_nodes=True)
     return json.dumps(elements)
 
 
@@ -936,6 +872,73 @@ def to_html(report: "AIBOMReport", blast_radii: list["BlastRadius"] | None = Non
             'shape': 'round-rectangle',
             'text-wrap': 'wrap',
             'text-max-width': '110px',
+          }},
+        }},
+        {{
+          selector: 'node[type="provider"]',
+          style: {{
+            'background-color': '#1e1b4b',
+            'border-color': '#818cf8',
+            'border-width': 3,
+            'label': 'data(label)',
+            'color': '#c7d2fe',
+            'font-size': '12px',
+            'font-weight': '700',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': 130,
+            'height': 40,
+            'shape': 'round-rectangle',
+            'text-wrap': 'wrap',
+            'text-max-width': '120px',
+          }},
+        }},
+        {{
+          selector: 'node[type^="cve_critical"]',
+          style: {{
+            'background-color': '#991b1b',
+            'border-color': '#f87171',
+            'border-width': 2,
+            'label': 'data(label)',
+            'color': '#fecaca',
+            'font-size': '8px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': 100,
+            'height': 28,
+            'shape': 'diamond',
+          }},
+        }},
+        {{
+          selector: 'node[type^="cve_high"]',
+          style: {{
+            'background-color': '#9a3412',
+            'border-color': '#fb923c',
+            'border-width': 2,
+            'label': 'data(label)',
+            'color': '#fed7aa',
+            'font-size': '8px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': 90,
+            'height': 26,
+            'shape': 'diamond',
+          }},
+        }},
+        {{
+          selector: 'node[type^="cve_medium"], node[type^="cve_low"], node[type^="cve_none"]',
+          style: {{
+            'background-color': '#854d0e',
+            'border-color': '#fbbf24',
+            'border-width': 1.5,
+            'label': 'data(label)',
+            'color': '#fef08a',
+            'font-size': '8px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': 80,
+            'height': 24,
+            'shape': 'diamond',
           }},
         }},
         {{

@@ -68,6 +68,7 @@ agent-bom answers the question security teams actually need:
 | Terraform | Bedrock, Vertex AI, Azure |
 | GitHub Actions | AI env vars + SDK steps |
 | Python agents | 10 frameworks detected |
+| Cloud providers | AWS, Azure, GCP, Databricks, Snowflake, Nebius |
 | Existing SBOMs | CycloneDX / SPDX import |
 
 **What it outputs:**
@@ -119,10 +120,14 @@ No config needed. Auto-discovers Claude Desktop, Cursor, Windsurf, Cline, VS Cod
 | Mode | Command |
 |------|---------|
 | Core CLI | `pip install agent-bom` |
-| REST API | `pip install agent-bom[api]` |
-| Dashboard | `pip install agent-bom[ui]` |
-| OpenTelemetry | `pip install agent-bom[otel]` |
-| Everything | `pip install agent-bom[api,ui,otel]` |
+| AWS discovery | `pip install 'agent-bom[aws]'` |
+| Databricks | `pip install 'agent-bom[databricks]'` |
+| Snowflake | `pip install 'agent-bom[snowflake]'` |
+| Nebius GPU cloud | `pip install 'agent-bom[nebius]'` |
+| All cloud | `pip install 'agent-bom[cloud]'` |
+| REST API | `pip install 'agent-bom[api]'` |
+| Dashboard | `pip install 'agent-bom[ui]'` |
+| OpenTelemetry | `pip install 'agent-bom[otel]'` |
 | Docker | `docker run --rm -v ~/.config:/root/.config:ro agentbom/agent-bom scan` |
 
 ---
@@ -245,6 +250,79 @@ agent-bom scan --policy policy.json --fail-on-severity high
 ]
 ```
 
+### Cloud provider discovery
+
+Discover AI agents directly from cloud provider APIs — no manual inventory files needed. Customer pays for compute; scans run in your environment with your credentials.
+
+```bash
+# AWS — Bedrock agents + Lambda + EKS + Step Functions + EC2
+agent-bom scan --aws --aws-region us-east-1
+agent-bom scan --aws --aws-include-lambda --aws-include-eks --aws-include-step-functions
+
+# Snowflake — Cortex Agents, MCP Servers, Search, Snowpark, Streamlit, query history
+agent-bom scan --snowflake
+
+# Databricks — cluster libraries, model serving endpoints
+agent-bom scan --databricks
+
+# Nebius — GPU cloud K8s clusters + container services
+agent-bom scan --nebius --nebius-project-id my-project
+
+# CoreWeave — K8s-native, use the --k8s flag with your cluster context
+agent-bom scan --k8s --context=coreweave-cluster --all-namespaces
+
+# Combine with local scans
+agent-bom scan --aws --databricks --snowflake --image myapp:latest --enrich
+```
+
+| Provider | What's discovered | Install |
+|----------|------------------|---------|
+| **AWS** | Bedrock agents, Lambda functions, EKS clusters, Step Functions workflows, EC2 instances, ECS images, SageMaker endpoints | `pip install 'agent-bom[aws]'` |
+| **Snowflake** | Cortex Agents, native MCP Servers (with tool specs), Cortex Search Services, Snowpark packages, Streamlit apps, query history audit trail, custom functions/procedures | `pip install 'agent-bom[snowflake]'` |
+| **Databricks** | Cluster PyPI/Maven packages, model serving endpoints | `pip install 'agent-bom[databricks]'` |
+| **Azure** | AI Foundry agents, Container Apps | `pip install 'agent-bom[azure]'` |
+| **GCP** | Vertex AI endpoints, Cloud Run services | `pip install 'agent-bom[gcp]'` |
+| **Nebius** | Managed K8s clusters, container services + images | `pip install 'agent-bom[nebius]'` |
+| **CoreWeave** | K8s-native — use `--k8s --context=coreweave-cluster` | (core CLI) |
+
+<details>
+<summary><b>AWS deep discovery flags</b></summary>
+
+| Flag | Discovers |
+|------|-----------|
+| `--aws` | Bedrock agents, ECS images, SageMaker endpoints (default) |
+| `--aws-include-lambda` | Standalone Lambda functions (filtered by AI runtimes) |
+| `--aws-include-eks` | EKS clusters → reuses `--k8s` pod image scanning per cluster |
+| `--aws-include-step-functions` | Step Functions workflows → extracts Lambda/SageMaker/Bedrock ARNs |
+| `--aws-include-ec2` | EC2 instances (requires `--aws-ec2-tag KEY=VALUE` for safety) |
+
+</details>
+
+<details>
+<summary><b>Snowflake deep discovery</b></summary>
+
+Snowflake discovery covers the full Cortex AI stack:
+
+- **Cortex Agents** — `SHOW AGENTS IN ACCOUNT` discovers agentic orchestration systems
+- **Native MCP Servers** — `SHOW MCP SERVERS IN ACCOUNT` + `DESCRIBE MCP SERVER` parses YAML tool specs. `SYSTEM_EXECUTE_SQL` tools are flagged as **[HIGH-RISK]**
+- **Query History Audit** — scans `INFORMATION_SCHEMA.QUERY_HISTORY()` for `CREATE MCP SERVER` and `CREATE AGENT` statements to catch objects created outside standard flows
+- **Custom Tools** — inventories `INFORMATION_SCHEMA.FUNCTIONS` and `INFORMATION_SCHEMA.PROCEDURES` with language annotation (Python/Java/JavaScript) for attack surface analysis
+- **Cortex Search + Snowpark + Streamlit** — existing discovery for search services, packages, and apps
+
+</details>
+
+Cloud SDKs are optional extras — install only what you need. Authentication uses each provider's standard credential chain (env vars, config files, IAM roles).
+
+### Graph visualization
+
+Cloud and local agents are visualized as an interactive dependency graph in the HTML dashboard. Provider nodes connect to agents, which connect to servers and packages. CVE nodes are attached to vulnerable packages with severity coloring.
+
+Export the raw graph for use in Cytoscape, Sigma.js, or other tools:
+
+```bash
+agent-bom scan --aws -f graph -o agent-graph.json
+```
+
 ### MCP Server Registry (100 servers)
 
 Ships with a curated registry of 100 known MCP servers — 58 verified. Each entry includes: package name + version pin, ecosystem, risk level, tool names, credential env vars, license, and source URL.
@@ -359,9 +437,9 @@ These tools solve different problems and are **complementary**.
 - [x] Enterprise remediation plan with named assets + risk narratives
 - [x] Enterprise aggregate dashboard (Cloud UI)
 - [x] AI-BOM export identity (CycloneDX, SPDX, JSON, SARIF)
-- [ ] AWS Bedrock live agent + action group discovery
-- [ ] Snowflake Cortex `CREATE MCP SERVER` scanning
-- [ ] Google Vertex AI agent discovery
+- [x] Cloud provider discovery (AWS, Azure, GCP, Databricks, Snowflake, Nebius, CoreWeave)
+- [x] Deep cloud scanning — Snowflake Cortex Agents/MCP Servers, AWS Lambda/EKS/Step Functions/EC2
+- [x] Graph visualization (provider → agent → server → package → CVE)
 - [ ] Jupyter notebook AI library scanning
 - [ ] Live MCP server introspection (tool enumeration without execution)
 - [ ] ToolHive integration (`--toolhive` flag for managed server scanning)
