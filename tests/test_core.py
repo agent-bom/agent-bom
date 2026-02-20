@@ -2414,3 +2414,143 @@ def test_scenario_sarif_output_has_atlas_tags():
     assert "properties" in result
     assert "atlas_tags" in result["properties"]
     assert "AML.T0010" in result["properties"]["atlas_tags"]
+
+
+# ─── Threat Framework Summary Tests ─────────────────────────────────────────
+
+
+def test_print_threat_frameworks_import():
+    """print_threat_frameworks can be imported from output module."""
+    from agent_bom.output import print_threat_frameworks
+    assert callable(print_threat_frameworks)
+
+
+def test_json_threat_framework_summary(sample_report):
+    """to_json() includes threat_framework_summary with OWASP + ATLAS data."""
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
+
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_owasp(br)
+        br.atlas_tags = tag_atlas(br)
+
+    data = to_json(sample_report)
+    assert "threat_framework_summary" in data
+    summary = data["threat_framework_summary"]
+
+    # OWASP section
+    assert "owasp_llm_top10" in summary
+    assert len(summary["owasp_llm_top10"]) == 10  # Full catalog
+    assert "total_owasp_triggered" in summary
+    assert summary["total_owasp_triggered"] > 0
+
+    # ATLAS section
+    assert "mitre_atlas" in summary
+    assert len(summary["mitre_atlas"]) == 13  # Full catalog
+    assert "total_atlas_triggered" in summary
+    assert summary["total_atlas_triggered"] > 0
+
+
+def test_json_framework_summary_structure(sample_report):
+    """Each framework entry has code, name, findings, and triggered fields."""
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
+
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_owasp(br)
+        br.atlas_tags = tag_atlas(br)
+
+    data = to_json(sample_report)
+    summary = data["threat_framework_summary"]
+
+    # Check OWASP entries
+    for entry in summary["owasp_llm_top10"]:
+        assert "code" in entry
+        assert "name" in entry
+        assert "findings" in entry
+        assert "triggered" in entry
+        assert isinstance(entry["findings"], int)
+        assert isinstance(entry["triggered"], bool)
+
+    # Check ATLAS entries
+    for entry in summary["mitre_atlas"]:
+        assert "technique_id" in entry
+        assert "name" in entry
+        assert "findings" in entry
+        assert "triggered" in entry
+
+
+def test_json_framework_lm05_always_triggered(sample_report):
+    """LLM05 (Supply Chain Vulnerabilities) is always triggered when there are findings."""
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
+
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_owasp(br)
+        br.atlas_tags = []
+
+    data = to_json(sample_report)
+    owasp_entries = {e["code"]: e for e in data["threat_framework_summary"]["owasp_llm_top10"]}
+    assert owasp_entries["LLM05"]["triggered"] is True
+    assert owasp_entries["LLM05"]["findings"] > 0
+
+
+def test_json_framework_lm06_with_credentials(sample_report):
+    """LLM06 (Sensitive Information Disclosure) triggers when credentials are exposed."""
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
+
+    # sample_report has exposed_credentials=["API_KEY"]
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_owasp(br)
+        br.atlas_tags = []
+
+    data = to_json(sample_report)
+    owasp_entries = {e["code"]: e for e in data["threat_framework_summary"]["owasp_llm_top10"]}
+    assert owasp_entries["LLM06"]["triggered"] is True
+
+
+def test_json_framework_atlas_t0010_always(sample_report):
+    """AML.T0010 (ML Supply Chain Compromise) is always triggered."""
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
+
+    for br in sample_report.blast_radii:
+        br.owasp_tags = []
+        br.atlas_tags = tag_atlas(br)
+
+    data = to_json(sample_report)
+    atlas_entries = {e["technique_id"]: e for e in data["threat_framework_summary"]["mitre_atlas"]}
+    assert atlas_entries["AML.T0010"]["triggered"] is True
+    assert atlas_entries["AML.T0010"]["findings"] > 0
+
+
+def test_json_framework_empty_when_no_findings():
+    """Framework summary shows zero triggered when no blast radii."""
+    report = AIBOMReport(agents=[], blast_radii=[])
+    data = to_json(report)
+    summary = data["threat_framework_summary"]
+    assert summary["total_owasp_triggered"] == 0
+    assert summary["total_atlas_triggered"] == 0
+    assert all(e["triggered"] is False for e in summary["owasp_llm_top10"])
+    assert all(e["triggered"] is False for e in summary["mitre_atlas"])
+
+
+def test_print_threat_frameworks_no_crash(sample_report):
+    """print_threat_frameworks() runs without crashing on a real report."""
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
+    from agent_bom.output import print_threat_frameworks
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
+
+    for br in sample_report.blast_radii:
+        br.owasp_tags = tag_owasp(br)
+        br.atlas_tags = tag_atlas(br)
+
+    # Should not raise
+    print_threat_frameworks(sample_report)
+
+
+def test_print_threat_frameworks_empty_report():
+    """print_threat_frameworks() handles empty reports gracefully."""
+    from agent_bom.output import print_threat_frameworks
+
+    report = AIBOMReport(agents=[], blast_radii=[])
+    # Should not raise
+    print_threat_frameworks(report)
