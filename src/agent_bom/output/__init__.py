@@ -296,6 +296,7 @@ def build_remediation_plan(blast_radii: list[BlastRadius]) -> list[dict]:
     groups: dict[tuple, dict] = defaultdict(lambda: {
         "package": "", "ecosystem": "", "current": "", "fix": None,
         "vulns": [], "agents": set(), "creds": set(), "tools": set(),
+        "owasp": set(), "atlas": set(),
         "max_severity": Severity.NONE, "has_kev": False, "ai_risk": False,
     })
     severity_order = {Severity.CRITICAL: 4, Severity.HIGH: 3, Severity.MEDIUM: 2, Severity.LOW: 1, Severity.NONE: 0}
@@ -312,6 +313,8 @@ def build_remediation_plan(blast_radii: list[BlastRadius]) -> list[dict]:
             g["agents"].add(a.name)
         g["creds"].update(br.exposed_credentials)
         g["tools"].update(t.name for t in br.exposed_tools)
+        g["owasp"].update(br.owasp_tags)
+        g["atlas"].update(br.atlas_tags)
         if severity_order.get(br.vulnerability.severity, 0) > severity_order.get(g["max_severity"], 0):
             g["max_severity"] = br.vulnerability.severity
         if br.vulnerability.is_kev:
@@ -322,9 +325,11 @@ def build_remediation_plan(blast_radii: list[BlastRadius]) -> list[dict]:
     plan = []
     for g in groups.values():
         g["vulns"] = list(set(g["vulns"]))
-        g["agents"] = list(g["agents"])
-        g["creds"] = list(g["creds"])
-        g["tools"] = list(g["tools"])
+        g["agents"] = sorted(g["agents"])
+        g["creds"] = sorted(g["creds"])
+        g["tools"] = sorted(g["tools"])
+        g["owasp"] = sorted(g["owasp"])
+        g["atlas"] = sorted(g["atlas"])
         g["impact"] = (
             len(g["agents"]) * 10 + len(g["creds"]) * 3 + len(g["vulns"])
             + (5 if g["has_kev"] else 0) + (3 if g["ai_risk"] else 0)
@@ -335,14 +340,24 @@ def build_remediation_plan(blast_radii: list[BlastRadius]) -> list[dict]:
     return plan
 
 
-def print_remediation_plan(blast_radii: list[BlastRadius]) -> None:
-    """Print a prioritized remediation plan to the console."""
-    if not blast_radii:
+def print_remediation_plan(report: AIBOMReport) -> None:
+    """Print a prioritized remediation plan with named assets and risk narrative."""
+    if not report.blast_radii:
         return
 
-    plan = build_remediation_plan(blast_radii)
+    plan = build_remediation_plan(report.blast_radii)
     fixable = [p for p in plan if p["fix"]]
     unfixable = [p for p in plan if not p["fix"]]
+
+    # Totals for percentage calculations
+    total_agents = report.total_agents or 1
+    all_creds: set[str] = set()
+    all_tools: set[str] = set()
+    for br in report.blast_radii:
+        all_creds.update(br.exposed_credentials)
+        all_tools.update(t.name for t in br.exposed_tools)
+    total_creds = len(all_creds) or 1
+    total_tools = len(all_tools) or 1
 
     console.print("\n[bold green]🔧 Remediation Plan[/bold green]\n")
 
@@ -358,23 +373,121 @@ def print_remediation_plan(blast_radii: list[BlastRadius]) -> None:
             style = sev_style.get(sev, "white")
             kev_flag = " [red bold][KEV][/red bold]" if item["has_kev"] else ""
             ai_flag = " [magenta][AI-RISK][/magenta]" if item["ai_risk"] else ""
+
+            # Header: upgrade package version → fix
             console.print(
                 f"  [{style}]{i}. upgrade {item['package']}[/{style}]  "
                 f"[dim]{item['current']}[/dim] → [green bold]{item['fix']}[/green bold]"
                 f"{kev_flag}{ai_flag}"
             )
-            impact_parts = [f"clears {len(item['vulns'])} vuln(s)", f"{len(item['agents'])} agent(s) protected"]
+
+            # Impact line with counts
+            n_vulns = len(item["vulns"])
+            n_agents = len(item["agents"])
+            n_creds = len(item["creds"])
+            n_tools = len(item["tools"])
+
+            impact_parts = [f"clears {n_vulns} vuln(s)"]
+            impact_parts.append(f"{n_agents} agent(s) protected ({_pct(n_agents, total_agents)})")
             if item["creds"]:
-                impact_parts.append(f"frees {len(item['creds'])} credential(s): {', '.join(item['creds'][:3])}")
+                impact_parts.append(f"frees {n_creds} credential(s) ({_pct(n_creds, total_creds)})")
             if item["tools"]:
-                impact_parts.append(f"removes attacker access to {len(item['tools'])} tool(s)")
-            console.print(f"     [dim]{'  •  '.join(impact_parts)}[/dim]\n")
+                impact_parts.append(f"secures {n_tools} tool(s) ({_pct(n_tools, total_tools)})")
+            console.print(f"     [dim]{'  •  '.join(impact_parts)}[/dim]")
+
+            # Named assets
+            if item["agents"]:
+                console.print(f"     [dim]agents:[/dim]  {', '.join(item['agents'])}")
+            if item["creds"]:
+                console.print(f"     [dim]credentials:[/dim]  [yellow]{', '.join(item['creds'])}[/yellow]")
+            if item["tools"]:
+                console.print(f"     [dim]tools:[/dim]  {', '.join(item['tools'][:8])}"
+                              + (f" +{len(item['tools']) - 8} more" if len(item["tools"]) > 8 else ""))
+
+            # Threat framework tags
+            tags = []
+            if item["owasp"]:
+                tags.append("[purple]" + " ".join(item["owasp"]) + "[/purple]")
+            if item["atlas"]:
+                tags.append("[cyan]" + " ".join(item["atlas"]) + "[/cyan]")
+            if tags:
+                console.print(f"     [dim]mitigates:[/dim]  {' '.join(tags)}")
+
+            # Risk narrative — what happens if NOT fixed
+            console.print(f"     [dim red]⚠ if not fixed:[/dim red] "
+                          f"[dim]attacker exploiting {item['vulns'][0]} can reach "
+                          f"{'[yellow]' + ', '.join(item['creds'][:2]) + '[/yellow]' if item['creds'] else 'no credentials'} "
+                          f"via {', '.join(item['agents'][:2])}"
+                          f"{' through ' + ', '.join(item['tools'][:3]) if item['tools'] else ''}[/dim]")
+            console.print()
 
     if unfixable:
         console.print(f"  [dim yellow]⚠ {len(unfixable)} package(s) have no fix yet — monitor upstream for patches:[/dim yellow]")
         for item in unfixable[:10]:
-            console.print(f"    [dim]• {item['package']}@{item['current']} ({', '.join(item['vulns'][:3])})[/dim]")
+            agents_str = f" ({', '.join(item['agents'][:3])})" if item["agents"] else ""
+            console.print(f"    [dim]• {item['package']}@{item['current']} — {', '.join(item['vulns'][:3])}{agents_str}[/dim]")
         console.print()
+
+
+def _pct(part: int, total: int) -> str:
+    """Format a percentage string."""
+    return f"{round(part / total * 100)}%" if total > 0 else "—"
+
+
+def _build_remediation_json(report: AIBOMReport) -> list[dict]:
+    """Build JSON-serializable remediation plan with named assets and percentages."""
+    plan = build_remediation_plan(report.blast_radii)
+    total_agents = report.total_agents or 1
+
+    all_creds: set[str] = set()
+    all_tools: set[str] = set()
+    for br in report.blast_radii:
+        all_creds.update(br.exposed_credentials)
+        all_tools.update(t.name for t in br.exposed_tools)
+    total_creds = len(all_creds) or 1
+    total_tools = len(all_tools) or 1
+
+    result = []
+    for item in plan:
+        n_agents = len(item["agents"])
+        n_creds = len(item["creds"])
+        n_tools = len(item["tools"])
+        result.append({
+            "package": item["package"],
+            "ecosystem": item["ecosystem"],
+            "current_version": item["current"],
+            "fixed_version": item["fix"],
+            "severity": item["max_severity"].value,
+            "is_kev": item["has_kev"],
+            "impact_score": item["impact"],
+            "vulnerabilities": item["vulns"],
+            "affected_agents": item["agents"],
+            "agents_pct": round(n_agents / total_agents * 100),
+            "exposed_credentials": item["creds"],
+            "credentials_pct": round(n_creds / total_creds * 100) if n_creds else 0,
+            "reachable_tools": item["tools"],
+            "tools_pct": round(n_tools / total_tools * 100) if n_tools else 0,
+            "owasp_tags": item["owasp"],
+            "atlas_tags": item["atlas"],
+            "risk_narrative": _risk_narrative(item),
+        })
+    return result
+
+
+def _risk_narrative(item: dict) -> str:
+    """Build plain-text risk narrative for a remediation item."""
+    vuln_id = item["vulns"][0] if item["vulns"] else "this vulnerability"
+    agents = ", ".join(item["agents"][:3]) or "affected agents"
+    creds = ", ".join(item["creds"][:3])
+    tools = ", ".join(item["tools"][:3])
+
+    parts = [f"If not remediated, an attacker exploiting {vuln_id}"]
+    if creds:
+        parts.append(f"can exfiltrate {creds}")
+    parts.append(f"via {agents}")
+    if tools:
+        parts.append(f"through {tools}")
+    return " ".join(parts) + "."
 
 
 # ─── JSON Output ────────────────────────────────────────────────────────────
@@ -510,6 +623,7 @@ def to_json(report: AIBOMReport) -> dict:
             for br in report.blast_radii
         ],
         "threat_framework_summary": _build_framework_summary(report.blast_radii),
+        "remediation_plan": _build_remediation_json(report),
     }
 
 
