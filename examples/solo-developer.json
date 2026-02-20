@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "source": "local",
+  "agents": [
+    {
+      "name": "my-coding-assistant",
+      "agent_type": "claude-desktop",
+      "config_path": "~/.config/claude/claude_desktop_config.json",
+      "mcp_servers": [
+        {
+          "name": "filesystem",
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/dev/projects"],
+          "env": {},
+          "transport": "stdio",
+          "tools": [
+            {"name": "read_file", "description": "Read a file from the filesystem"},
+            {"name": "write_file", "description": "Write content to a file"},
+            {"name": "list_directory", "description": "List directory contents"}
+          ],
+          "packages": [
+            {"name": "@modelcontextprotocol/server-filesystem", "version": "0.6.2", "ecosystem": "npm"}
+          ]
+        },
+        {
+          "name": "sqlite",
+          "command": "uvx",
+          "args": ["mcp-server-sqlite", "--db-path", "./dev.db"],
+          "env": {},
+          "transport": "stdio",
+          "tools": [
+            {"name": "read_query", "description": "Execute a SELECT query"},
+            {"name": "write_query", "description": "Execute INSERT/UPDATE/DELETE"},
+            {"name": "list_tables", "description": "List all tables"}
+          ],
+          "packages": [
+            {"name": "mcp-server-sqlite", "version": "0.1.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    }
+  ]
+}

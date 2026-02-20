@@ -1,0 +1,73 @@
+{
+  "schema_version": "1",
+  "source": "github-actions",
+  "agents": [
+    {
+      "name": "ci-build-agent",
+      "agent_type": "custom",
+      "config_path": ".github/workflows/build.yml",
+      "mcp_servers": [
+        {
+          "name": "build-tools-server",
+          "command": "npx",
+          "args": ["-y", "build-tools-mcp"],
+          "env": {
+            "NPM_TOKEN": "***",
+            "CODECOV_TOKEN": "***",
+            "SONAR_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "run_tests", "description": "Execute test suite"},
+            {"name": "run_lint", "description": "Run linter"},
+            {"name": "build_artifact", "description": "Build release artifact"},
+            {"name": "upload_coverage", "description": "Upload code coverage"},
+            {"name": "execute_shell", "description": "Execute shell command"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.17.1", "ecosystem": "npm"},
+            {"name": "webpack", "version": "5.75.0", "ecosystem": "npm"},
+            {"name": "eslint", "version": "8.30.0", "ecosystem": "npm"},
+            {"name": "jest", "version": "29.3.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ci-deploy-agent",
+      "agent_type": "custom",
+      "config_path": ".github/workflows/deploy.yml",
+      "mcp_servers": [
+        {
+          "name": "deploy-server",
+          "command": "uvx",
+          "args": ["deploy-mcp"],
+          "env": {
+            "AWS_ACCESS_KEY_ID": "***",
+            "AWS_SECRET_ACCESS_KEY": "***",
+            "DOCKER_HUB_TOKEN": "***",
+            "SLACK_WEBHOOK": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "push_image", "description": "Push Docker image to registry"},
+            {"name": "deploy_ecs", "description": "Deploy to ECS cluster"},
+            {"name": "run_migration", "description": "Run database migration"},
+            {"name": "notify_slack", "description": "Send Slack notification"},
+            {"name": "execute_command", "description": "Execute arbitrary command"},
+            {"name": "read_secrets", "description": "Read from AWS Secrets Manager"},
+            {"name": "rollback", "description": "Rollback deployment"}
+          ],
+          "packages": [
+            {"name": "boto3", "version": "1.34.0", "ecosystem": "pypi"},
+            {"name": "docker", "version": "7.0.0", "ecosystem": "pypi"},
+            {"name": "paramiko", "version": "3.4.0", "ecosystem": "pypi"},
+            {"name": "cryptography", "version": "41.0.0", "ecosystem": "pypi"},
+            {"name": "requests", "version": "2.31.0", "ecosystem": "pypi"},
+            {"name": "flask", "version": "2.3.2", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "schema_version": "1",
+  "source": "startup-platform",
+  "agents": [
+    {
+      "name": "customer-support-bot",
+      "agent_type": "custom",
+      "config_path": "/opt/agents/support-bot/config.json",
+      "mcp_servers": [
+        {
+          "name": "zendesk-server",
+          "command": "npx",
+          "args": ["-y", "@zendesk/mcp-server"],
+          "env": {
+            "ZENDESK_API_TOKEN": "***",
+            "ZENDESK_SUBDOMAIN": "startup"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_tickets", "description": "Search support tickets"},
+            {"name": "update_ticket", "description": "Update a ticket status"},
+            {"name": "create_ticket", "description": "Create new support ticket"},
+            {"name": "get_customer", "description": "Get customer details"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.18.2", "ecosystem": "npm"},
+            {"name": "axios", "version": "1.6.0", "ecosystem": "npm"}
+          ]
+        },
+        {
+          "name": "postgres-server",
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-postgres"],
+          "env": {
+            "POSTGRES_URL": "postgresql://app:secret@db:5432/support",
+            "DB_PASSWORD": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "query", "description": "Execute SQL query"},
+            {"name": "list_tables", "description": "List tables"}
+          ],
+          "packages": [
+            {"name": "@modelcontextprotocol/server-postgres", "version": "0.6.2", "ecosystem": "npm"},
+            {"name": "pg", "version": "8.11.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "data-analyst-agent",
+      "agent_type": "cursor",
+      "config_path": "~/.cursor/mcp.json",
+      "mcp_servers": [
+        {
+          "name": "analytics-pipeline",
+          "command": "uvx",
+          "args": ["analytics-mcp"],
+          "env": {
+            "BIGQUERY_KEY": "***",
+            "GCS_BUCKET": "startup-analytics"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "run_query", "description": "Run BigQuery SQL"},
+            {"name": "list_datasets", "description": "List BigQuery datasets"},
+            {"name": "export_csv", "description": "Export results to CSV"},
+            {"name": "create_chart", "description": "Generate chart from data"},
+            {"name": "schedule_report", "description": "Schedule automated reports"},
+            {"name": "send_email", "description": "Send email with report"}
+          ],
+          "packages": [
+            {"name": "pandas", "version": "2.0.0", "ecosystem": "pypi"},
+            {"name": "google-cloud-bigquery", "version": "3.12.0", "ecosystem": "pypi"},
+            {"name": "flask", "version": "2.3.2", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "devops-assistant",
+      "agent_type": "claude-code",
+      "config_path": "~/.claude/claude_code_config.json",
+      "mcp_servers": [
+        {
+          "name": "github-server",
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-github"],
+          "env": {
+            "GITHUB_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_repositories", "description": "Search GitHub repos"},
+            {"name": "create_pull_request", "description": "Create a PR"},
+            {"name": "list_issues", "description": "List repo issues"},
+            {"name": "create_issue", "description": "Create new issue"}
+          ],
+          "packages": [
+            {"name": "@modelcontextprotocol/server-github", "version": "0.6.2", "ecosystem": "npm"},
+            {"name": "@octokit/rest", "version": "20.0.0", "ecosystem": "npm"}
+          ]
+        },
+        {
+          "name": "docker-server",
+          "command": "npx",
+          "args": ["-y", "mcp-docker"],
+          "env": {
+            "DOCKER_HOST": "unix:///var/run/docker.sock"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "list_containers", "description": "List running containers"},
+            {"name": "exec_command", "description": "Execute command in container"},
+            {"name": "view_logs", "description": "View container logs"},
+            {"name": "restart_container", "description": "Restart a container"}
+          ],
+          "packages": [
+            {"name": "dockerode", "version": "4.0.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    }
+  ]
+}

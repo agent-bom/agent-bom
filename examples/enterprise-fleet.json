@@ -1,0 +1,414 @@
+{
+  "schema_version": "1",
+  "source": "enterprise-cmdb",
+  "generated_at": "2026-02-20T00:00:00Z",
+  "agents": [
+    {
+      "name": "prod-customer-agent",
+      "agent_type": "custom",
+      "config_path": "arn:aws:bedrock:us-east-1:111111111:agent/CUST001",
+      "source": "aws-bedrock",
+      "mcp_servers": [
+        {
+          "name": "crm-server",
+          "command": "node",
+          "args": ["dist/crm-mcp.js"],
+          "env": {
+            "SALESFORCE_TOKEN": "***",
+            "SALESFORCE_INSTANCE": "https://company.salesforce.com",
+            "DB_CONNECTION_STRING": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_contacts", "description": "Search CRM contacts"},
+            {"name": "update_opportunity", "description": "Update sales opportunity"},
+            {"name": "create_case", "description": "Create support case"},
+            {"name": "get_account", "description": "Get account details"},
+            {"name": "send_notification", "description": "Send customer notification"},
+            {"name": "export_report", "description": "Export CRM report"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.18.2", "ecosystem": "npm"},
+            {"name": "jsforce", "version": "2.0.0", "ecosystem": "npm"},
+            {"name": "jsonwebtoken", "version": "9.0.0", "ecosystem": "npm"},
+            {"name": "axios", "version": "1.6.0", "ecosystem": "npm"}
+          ]
+        },
+        {
+          "name": "knowledge-base",
+          "command": "node",
+          "args": ["dist/kb-server.js"],
+          "env": {
+            "OPENAI_API_KEY": "***",
+            "PINECONE_API_KEY": "***",
+            "S3_ACCESS_KEY": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_docs", "description": "Semantic search over knowledge base"},
+            {"name": "retrieve_article", "description": "Retrieve specific article"},
+            {"name": "update_embedding", "description": "Update document embeddings"},
+            {"name": "list_collections", "description": "List document collections"}
+          ],
+          "packages": [
+            {"name": "langchain", "version": "0.1.0", "ecosystem": "npm"},
+            {"name": "@pinecone-database/pinecone", "version": "2.0.0", "ecosystem": "npm"},
+            {"name": "openai", "version": "4.20.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prod-data-pipeline",
+      "agent_type": "custom",
+      "config_path": "arn:aws:bedrock:us-east-1:111111111:agent/DATA001",
+      "source": "aws-bedrock",
+      "mcp_servers": [
+        {
+          "name": "etl-server",
+          "command": "uvx",
+          "args": ["etl-mcp-server"],
+          "env": {
+            "REDSHIFT_PASSWORD": "***",
+            "AWS_SECRET_ACCESS_KEY": "***",
+            "SNOWFLAKE_PASSWORD": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "run_etl_job", "description": "Execute ETL pipeline"},
+            {"name": "query_warehouse", "description": "Query data warehouse"},
+            {"name": "schedule_job", "description": "Schedule recurring ETL"},
+            {"name": "monitor_pipeline", "description": "Monitor pipeline health"},
+            {"name": "create_table", "description": "Create warehouse table"},
+            {"name": "load_data", "description": "Load data from S3"},
+            {"name": "validate_schema", "description": "Validate data schema"},
+            {"name": "execute_sql", "description": "Execute arbitrary SQL"}
+          ],
+          "packages": [
+            {"name": "pandas", "version": "2.0.0", "ecosystem": "pypi"},
+            {"name": "sqlalchemy", "version": "2.0.0", "ecosystem": "pypi"},
+            {"name": "boto3", "version": "1.34.0", "ecosystem": "pypi"},
+            {"name": "pyarrow", "version": "14.0.0", "ecosystem": "pypi"},
+            {"name": "snowflake-connector-python", "version": "3.6.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prod-security-scanner",
+      "agent_type": "custom",
+      "config_path": "arn:aws:bedrock:us-east-1:111111111:agent/SEC001",
+      "source": "aws-bedrock",
+      "mcp_servers": [
+        {
+          "name": "siem-server",
+          "command": "python",
+          "args": ["-m", "siem_mcp"],
+          "env": {
+            "SPLUNK_TOKEN": "***",
+            "CROWDSTRIKE_API_KEY": "***",
+            "JIRA_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_logs", "description": "Search SIEM logs"},
+            {"name": "create_alert", "description": "Create security alert"},
+            {"name": "run_query", "description": "Run SPL query"},
+            {"name": "get_incidents", "description": "Get open incidents"},
+            {"name": "execute_playbook", "description": "Execute response playbook"},
+            {"name": "isolate_host", "description": "Isolate compromised host"},
+            {"name": "block_ip", "description": "Block IP address"}
+          ],
+          "packages": [
+            {"name": "requests", "version": "2.31.0", "ecosystem": "pypi"},
+            {"name": "cryptography", "version": "41.0.0", "ecosystem": "pypi"},
+            {"name": "pyjwt", "version": "2.8.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cortex-analyst-prod",
+      "agent_type": "custom",
+      "config_path": "snowflake://acme.us-east-1/cortex/analyst-prod",
+      "source": "snowflake",
+      "mcp_servers": [
+        {
+          "name": "warehouse-query-server",
+          "command": "npx",
+          "args": ["-y", "@snowflake/mcp-data-server"],
+          "env": {
+            "SNOWFLAKE_ACCOUNT": "acme.us-east-1",
+            "SNOWFLAKE_TOKEN": "***",
+            "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "query_warehouse", "description": "Execute SQL on warehouse"},
+            {"name": "list_databases", "description": "List accessible databases"},
+            {"name": "describe_table", "description": "Get table DDL and stats"}
+          ],
+          "packages": [
+            {"name": "snowflake-connector-python", "version": "3.6.0", "ecosystem": "pypi"},
+            {"name": "pandas", "version": "2.0.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cortex-analyst-staging",
+      "agent_type": "custom",
+      "config_path": "snowflake://acme.us-east-1/cortex/analyst-staging",
+      "source": "snowflake",
+      "mcp_servers": [
+        {
+          "name": "staging-query-server",
+          "command": "npx",
+          "args": ["-y", "@snowflake/mcp-data-server"],
+          "env": {
+            "SNOWFLAKE_ACCOUNT": "acme-staging.us-east-1",
+            "SNOWFLAKE_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "packages": [
+            {"name": "snowflake-connector-python", "version": "3.5.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ml-training-agent",
+      "agent_type": "custom",
+      "config_path": "arn:aws:sagemaker:us-east-1:111111111:training-job/ML001",
+      "source": "aws-sagemaker",
+      "mcp_servers": [
+        {
+          "name": "model-registry",
+          "command": "uvx",
+          "args": ["mlflow-mcp-server"],
+          "env": {
+            "MLFLOW_TRACKING_URI": "https://mlflow.internal.company.com",
+            "MLFLOW_TOKEN": "***",
+            "S3_SECRET_KEY": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "log_metrics", "description": "Log training metrics"},
+            {"name": "register_model", "description": "Register trained model"},
+            {"name": "promote_model", "description": "Promote model to production"},
+            {"name": "list_experiments", "description": "List ML experiments"},
+            {"name": "download_artifact", "description": "Download model artifacts"}
+          ],
+          "packages": [
+            {"name": "transformers", "version": "4.36.0", "ecosystem": "pypi"},
+            {"name": "torch", "version": "2.1.2", "ecosystem": "pypi"},
+            {"name": "mlflow", "version": "2.10.0", "ecosystem": "pypi"},
+            {"name": "numpy", "version": "1.26.0", "ecosystem": "pypi"},
+            {"name": "scipy", "version": "1.11.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hr-assistant",
+      "agent_type": "custom",
+      "config_path": "/opt/agents/hr-bot/config.json",
+      "source": "on-prem",
+      "mcp_servers": [
+        {
+          "name": "workday-server",
+          "command": "node",
+          "args": ["dist/workday-mcp.js"],
+          "env": {
+            "WORKDAY_CLIENT_SECRET": "***",
+            "WORKDAY_TENANT": "acme",
+            "SMTP_PASSWORD": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_employees", "description": "Search employee directory"},
+            {"name": "get_benefits", "description": "Get benefits information"},
+            {"name": "submit_pto", "description": "Submit PTO request"},
+            {"name": "get_payroll", "description": "Get payroll details"},
+            {"name": "run_report", "description": "Run HR report"},
+            {"name": "send_email", "description": "Send email notification"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.18.2", "ecosystem": "npm"},
+            {"name": "nodemailer", "version": "6.9.0", "ecosystem": "npm"},
+            {"name": "jsonwebtoken", "version": "9.0.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "finance-agent",
+      "agent_type": "custom",
+      "config_path": "/opt/agents/finance/config.json",
+      "source": "on-prem",
+      "mcp_servers": [
+        {
+          "name": "netsuite-server",
+          "command": "node",
+          "args": ["dist/netsuite-mcp.js"],
+          "env": {
+            "NETSUITE_TOKEN": "***",
+            "NETSUITE_ACCOUNT_ID": "12345",
+            "STRIPE_SECRET_KEY": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_invoices", "description": "Search invoices"},
+            {"name": "create_payment", "description": "Process payment"},
+            {"name": "reconcile_accounts", "description": "Reconcile bank accounts"},
+            {"name": "generate_report", "description": "Generate financial report"},
+            {"name": "approve_expense", "description": "Approve expense report"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.18.2", "ecosystem": "npm"},
+            {"name": "stripe", "version": "14.0.0", "ecosystem": "npm"},
+            {"name": "jsonwebtoken", "version": "9.0.0", "ecosystem": "npm"},
+            {"name": "lodash", "version": "4.17.21", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "devops-agent-1",
+      "agent_type": "claude-code",
+      "config_path": "~/.claude/claude_code_config.json",
+      "source": "local",
+      "mcp_servers": [
+        {
+          "name": "k8s-server",
+          "command": "npx",
+          "args": ["-y", "mcp-k8s"],
+          "env": {
+            "KUBECONFIG": "/home/ops/.kube/config"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "get_pods", "description": "List pods"},
+            {"name": "get_deployments", "description": "List deployments"},
+            {"name": "scale_deployment", "description": "Scale deployment replicas"},
+            {"name": "exec_pod", "description": "Execute command in pod"},
+            {"name": "get_logs", "description": "Get pod logs"},
+            {"name": "apply_manifest", "description": "Apply K8s manifest"},
+            {"name": "delete_resource", "description": "Delete K8s resource"}
+          ],
+          "packages": [
+            {"name": "@kubernetes/client-node", "version": "0.20.0", "ecosystem": "npm"}
+          ]
+        },
+        {
+          "name": "terraform-server",
+          "command": "npx",
+          "args": ["-y", "mcp-terraform"],
+          "env": {
+            "AWS_ACCESS_KEY_ID": "***",
+            "AWS_SECRET_ACCESS_KEY": "***",
+            "TF_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "plan", "description": "Run terraform plan"},
+            {"name": "apply", "description": "Run terraform apply"},
+            {"name": "state_list", "description": "List terraform state"},
+            {"name": "show_resource", "description": "Show resource details"}
+          ],
+          "packages": [
+            {"name": "express", "version": "4.18.2", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "devops-agent-2",
+      "agent_type": "cursor",
+      "config_path": "~/.cursor/mcp.json",
+      "source": "local",
+      "mcp_servers": [
+        {
+          "name": "github-server",
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-github"],
+          "env": {
+            "GITHUB_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "search_repos", "description": "Search repositories"},
+            {"name": "create_pr", "description": "Create pull request"},
+            {"name": "merge_pr", "description": "Merge pull request"},
+            {"name": "list_issues", "description": "List issues"}
+          ],
+          "packages": [
+            {"name": "@modelcontextprotocol/server-github", "version": "0.6.2", "ecosystem": "npm"},
+            {"name": "@octokit/rest", "version": "20.0.0", "ecosystem": "npm"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "legal-review-agent",
+      "agent_type": "custom",
+      "config_path": "/opt/agents/legal/config.json",
+      "source": "on-prem",
+      "mcp_servers": [
+        {
+          "name": "contract-server",
+          "command": "uvx",
+          "args": ["contract-review-mcp"],
+          "env": {
+            "OPENAI_API_KEY": "***",
+            "DOCUSIGN_TOKEN": "***",
+            "SHAREPOINT_TOKEN": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "analyze_contract", "description": "Analyze contract for risks"},
+            {"name": "extract_clauses", "description": "Extract key clauses"},
+            {"name": "compare_versions", "description": "Compare contract versions"},
+            {"name": "generate_summary", "description": "Generate contract summary"},
+            {"name": "send_for_signature", "description": "Send to DocuSign"}
+          ],
+          "packages": [
+            {"name": "openai", "version": "1.10.0", "ecosystem": "pypi"},
+            {"name": "pypdf", "version": "3.17.0", "ecosystem": "pypi"},
+            {"name": "langchain", "version": "0.1.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "marketing-content-agent",
+      "agent_type": "custom",
+      "config_path": "/opt/agents/marketing/config.json",
+      "source": "on-prem",
+      "mcp_servers": [
+        {
+          "name": "content-server",
+          "command": "uvx",
+          "args": ["content-mcp"],
+          "env": {
+            "OPENAI_API_KEY": "***",
+            "HUBSPOT_TOKEN": "***",
+            "WORDPRESS_API_KEY": "***"
+          },
+          "transport": "stdio",
+          "tools": [
+            {"name": "generate_copy", "description": "Generate marketing copy"},
+            {"name": "publish_post", "description": "Publish blog post"},
+            {"name": "schedule_social", "description": "Schedule social media post"},
+            {"name": "analyze_seo", "description": "Analyze SEO metrics"}
+          ],
+          "packages": [
+            {"name": "openai", "version": "1.10.0", "ecosystem": "pypi"},
+            {"name": "httpx", "version": "0.27.0", "ecosystem": "pypi"},
+            {"name": "beautifulsoup4", "version": "4.12.0", "ecosystem": "pypi"}
+          ]
+        }
+      ]
+    }
+  ]
+}
