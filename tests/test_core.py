@@ -255,7 +255,7 @@ def empty_report():
 
 def test_version_sync():
     from agent_bom import __version__
-    assert __version__ == "0.7.0"
+    assert __version__ == "0.9.0"
 
 
 def test_report_version_matches():
@@ -1660,6 +1660,7 @@ def test_api_health_endpoint():
     """GET /health returns {status: ok}."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
+
     from agent_bom.api.server import app
     client = TestClient(app)
     resp = client.get("/health")
@@ -1671,9 +1672,9 @@ def test_api_version_endpoint():
     """GET /version returns current version string."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
-    from agent_bom.api import server as _srv
-    from agent_bom.api.server import app
+
     from agent_bom import __version__
+    from agent_bom.api.server import app
     client = TestClient(app)
     resp = client.get("/version")
     assert resp.status_code == 200
@@ -1684,6 +1685,7 @@ def test_api_scan_submit_and_poll():
     """POST /v1/scan returns 202 with job_id; GET /v1/scan/{id} returns the job."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
+
     from agent_bom.api.server import app
     client = TestClient(app)
     # Submit a scan with no targets — completes quickly (done or failed: no agents on CI)
@@ -1705,6 +1707,7 @@ def test_api_scan_not_found():
     """GET /v1/scan/{id} with unknown id returns 404."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
+
     from agent_bom.api.server import app
     client = TestClient(app)
     resp = client.get("/v1/scan/does-not-exist-12345")
@@ -1715,6 +1718,7 @@ def test_api_jobs_list():
     """GET /v1/jobs returns a jobs list."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
+
     from agent_bom.api.server import app
     client = TestClient(app)
     resp = client.get("/v1/jobs")
@@ -1735,7 +1739,10 @@ def test_cli_main_help_has_api_in_listing():
 
 def test_grype_scan_mock(monkeypatch, tmp_path):
     """Grype scanner parses JSON output into Package objects with pre-populated vulns."""
-    import json, subprocess, shutil
+    import json
+    import shutil
+    import subprocess
+
     from agent_bom.image import _scan_with_grype
 
     grype_output = {
@@ -1793,8 +1800,8 @@ def test_owasp_lm06_credential_exposure(sample_report):
 
 def test_owasp_lm08_excessive_agency(sample_report):
     """More than 5 exposed tools + HIGH/CRITICAL severity triggers LLM08."""
-    from agent_bom.owasp import tag_blast_radius
     from agent_bom.models import MCPTool, Severity
+    from agent_bom.owasp import tag_blast_radius
     br = sample_report.blast_radii[0]
     br.vulnerability.severity = Severity.CRITICAL
     br.exposed_tools = [MCPTool(name=f"tool_{i}", description="") for i in range(6)]
@@ -1804,8 +1811,8 @@ def test_owasp_lm08_excessive_agency(sample_report):
 
 def test_owasp_tags_in_json_output(sample_report):
     """to_json() includes 'owasp_tags' field in each blast radius entry."""
-    from agent_bom.owasp import tag_blast_radius
     from agent_bom.output import to_json
+    from agent_bom.owasp import tag_blast_radius
     # Populate tags first (normally done by scanner)
     for br in sample_report.blast_radii:
         br.owasp_tags = tag_blast_radius(br)
@@ -1830,6 +1837,7 @@ def test_api_trust_headers():
     """Every API response includes X-Agent-Bom-Read-Only trust header."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
+
     from agent_bom.api.server import app
     client = TestClient(app)
     response = client.get("/health")
@@ -1842,7 +1850,8 @@ def test_registry_endpoint():
     """GET /v1/registry returns a non-empty list of MCP servers."""
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from fastapi.testclient import TestClient
-    from agent_bom.api.server import app, _load_registry
+
+    from agent_bom.api.server import _load_registry, app
     _load_registry.cache_clear()  # clear cache so fresh load from disk
     client = TestClient(app)
     response = client.get("/v1/registry")
@@ -1859,8 +1868,9 @@ def test_registry_endpoint():
 
 def test_http_client_create():
     """create_client returns an httpx.AsyncClient with retry transport."""
-    from agent_bom.http_client import create_client
     import httpx
+
+    from agent_bom.http_client import create_client
     client = create_client(timeout=10.0)
     assert isinstance(client, httpx.AsyncClient)
     # Cleanup
@@ -1870,7 +1880,7 @@ def test_http_client_create():
 
 def test_http_client_retry_constants():
     """Retry configuration constants are sensible."""
-    from agent_bom.http_client import MAX_RETRIES, INITIAL_BACKOFF, RETRYABLE_STATUS_CODES
+    from agent_bom.http_client import INITIAL_BACKOFF, MAX_RETRIES, RETRYABLE_STATUS_CODES
     assert MAX_RETRIES >= 2
     assert INITIAL_BACKOFF >= 0.5
     assert 429 in RETRYABLE_STATUS_CODES
@@ -1881,16 +1891,13 @@ def test_http_client_retry_constants():
 
 def test_integrity_module_imports():
     """integrity.py module imports without error and exposes expected API."""
-    from agent_bom.integrity import (
-        verify_package_integrity,
-        verify_npm_integrity,
-        verify_pypi_integrity,
-        check_package_provenance,
-        check_npm_provenance,
-        check_pypi_provenance,
-    )
     # All should be async functions
     import asyncio
+
+    from agent_bom.integrity import (
+        check_package_provenance,
+        verify_package_integrity,
+    )
     assert asyncio.iscoroutinefunction(verify_package_integrity)
     assert asyncio.iscoroutinefunction(check_package_provenance)
 
@@ -1932,7 +1939,7 @@ def test_credential_redaction_in_discovery():
 
 def test_atlas_module_imports():
     """ATLAS module can be imported and has the expected catalog."""
-    from agent_bom.atlas import ATLAS_TECHNIQUES, atlas_label, atlas_labels, tag_blast_radius
+    from agent_bom.atlas import ATLAS_TECHNIQUES
     assert "AML.T0010" in ATLAS_TECHNIQUES
     assert "AML.T0051" in ATLAS_TECHNIQUES
     assert "AML.T0062" in ATLAS_TECHNIQUES
@@ -1942,7 +1949,6 @@ def test_atlas_module_imports():
 def test_atlas_supply_chain_always_present():
     """AML.T0010 (ML Supply Chain Compromise) is always tagged on every blast radius."""
     from agent_bom.atlas import tag_blast_radius as tag_atlas
-    from agent_bom.models import MCPTool
     br = BlastRadius(
         vulnerability=Vulnerability(id="CVE-2024-1234", summary="test", severity=Severity.LOW),
         package=Package(name="express", version="4.18.0", ecosystem="npm"),
@@ -2102,9 +2108,9 @@ def test_scenario_enterprise_multi_agent():
 
     Validates that blast radius correctly maps CVEs across agents.
     """
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
     from agent_bom.models import MCPTool
     from agent_bom.owasp import tag_blast_radius as tag_owasp
-    from agent_bom.atlas import tag_blast_radius as tag_atlas
 
     # Agent 1: Claude Desktop with filesystem + sqlite servers
     srv1 = MCPServer(
@@ -2229,7 +2235,6 @@ def test_scenario_individual_developer():
 
 def test_scenario_docker_image_packages():
     """Scenario: Docker image scan produces packages from multiple ecosystems."""
-    from agent_bom.models import MCPTool
 
     # Simulating a Docker image with packages from npm + pypi + go
     packages = [
@@ -2268,9 +2273,9 @@ def test_scenario_docker_image_packages():
 
 def test_scenario_high_privilege_mcp_server():
     """Scenario: MCP server with shell access + many tools + credentials = maximum risk."""
+    from agent_bom.atlas import tag_blast_radius as tag_atlas
     from agent_bom.models import MCPTool
     from agent_bom.owasp import tag_blast_radius as tag_owasp
-    from agent_bom.atlas import tag_blast_radius as tag_atlas
 
     tools = [
         MCPTool(name="run_shell", description="Execute bash commands"),
@@ -2382,8 +2387,8 @@ def test_scenario_json_output_has_atlas_tags():
 
 def test_scenario_sarif_output_has_atlas_tags():
     """SARIF output includes atlas_tags in result properties."""
-    from agent_bom.owasp import tag_blast_radius as tag_owasp
     from agent_bom.atlas import tag_blast_radius as tag_atlas
+    from agent_bom.owasp import tag_blast_radius as tag_owasp
 
     vuln = Vulnerability(id="CVE-2024-0002", summary="test", severity=Severity.CRITICAL)
     pkg = Package(name="express", version="4.17.0", ecosystem="npm", vulnerabilities=[vuln])
