@@ -378,7 +378,7 @@ def _packages_from_layer(
 
     # Download the layer zip
     import urllib.request
-    with urllib.request.urlopen(download_url) as resp:  # noqa: S310 — presigned AWS URL
+    with urllib.request.urlopen(download_url) as resp:  # noqa: S310 — presigned AWS URL  # nosec B310
         layer_bytes = resp.read()
 
     # Parse the zip for package metadata
