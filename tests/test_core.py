@@ -1883,7 +1883,7 @@ def test_api_scan_completes_successfully():
     assert data["status"] in ("done", "failed", "running")
     if data["status"] == "done":
         assert data["result"] is not None
-        assert "summary" in data["result"]
+        assert "agents" in data["result"]
 
 
 def test_registry_endpoint():
