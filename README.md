@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>Scan AI agents and MCP servers for CVEs. Map blast radius — credentials, tools, and agents at risk. Tag every finding with OWASP LLM Top 10 + MITRE ATLAS.</b>
+  <b>Generate AI Bills of Materials. Scan AI agents and MCP servers for CVEs. Map blast radius. Enterprise remediation with named assets and risk narratives. OWASP LLM Top 10 + MITRE ATLAS.</b>
 </p>
 
 <p align="center">
@@ -46,12 +46,14 @@ agent-bom answers the question security teams actually need:
 
 > *If this CVE is exploited, which AI agents are compromised, which credentials leak, and which tools can an attacker reach?*
 
+- **AI-BOM generation** — structured inventory of agents, servers, packages, credentials, tools
 - **Blast radius analysis** — maps CVEs to agents, credentials, and MCP tools
+- **Enterprise remediation** — named assets, impact percentages, risk narratives per fix
 - **OWASP LLM Top 10 + MITRE ATLAS** — dual threat framework tagging on every finding
 - **100-server MCP registry** — risk levels, provenance, tool inventories
 - **Policy-as-code** — block unverified servers, enforce risk thresholds in CI
 - **Read-only** — never writes configs, never runs servers, never stores secrets
-- **Works everywhere** — CLI, Docker, REST API, CI/CD, Prometheus, Kubernetes
+- **Works everywhere** — CLI, Docker, REST API, Cloud UI, CI/CD, Prometheus, Kubernetes
 
 </td>
 <td width="45%" valign="top">
@@ -82,6 +84,9 @@ Console, HTML dashboard, SARIF, CycloneDX 1.6, SPDX 3.0, Prometheus, OTLP, JSON,
 
 - **[Install](#install)** — `pip install agent-bom` or Docker
 - **[Get started](#get-started)** — scan in 30 seconds
+- **[AI-BOM export](#ai-bom-export)** — CycloneDX, SPDX, JSON, SARIF, HTML
+- **[Remediation plan](#enterprise-remediation-plan)** — named assets, risk narratives
+- **[Cloud UI](#cloud-ui)** — enterprise aggregate dashboard
 - **[CI integration](#ci-integration)** — GitHub Actions + SARIF upload
 - **[REST API](#rest-api)** — FastAPI on port 8422
 - **[MCP Registry](data/mcp-registry.yaml)** — 100 known servers with metadata
@@ -192,6 +197,40 @@ After every scan, agent-bom shows which OWASP + ATLAS categories were triggered 
 
 **Cloud UI** — two-column threat matrix grid with hit/miss indicators and finding counts per category.
 
+### AI-BOM export
+
+Every scan produces a complete **AI Bill of Materials** — a structured document listing all agents, MCP servers, packages, credentials, tools, and vulnerabilities. Export in any standard format:
+
+```bash
+agent-bom scan -f cyclonedx -o ai-bom.cdx.json   # CycloneDX 1.6
+agent-bom scan -f spdx -o ai-bom.spdx.json       # SPDX 3.0
+agent-bom scan -f json -o ai-bom.json             # Full AI-BOM (document_type: "AI-BOM")
+agent-bom scan -f sarif -o results.sarif           # GitHub Security tab
+agent-bom scan -f html -o report.html              # Interactive HTML dashboard
+```
+
+The JSON output includes `"document_type": "AI-BOM"` and `"spec_version": "1.0"` at the top level for programmatic identification. Console output shows an export hint panel after every scan.
+
+### Enterprise remediation plan
+
+Each remediation tells you exactly **what will be protected** when you fix it:
+
+```
+ 3. upgrade python 3.11.14 → 3.13.10
+    clears 2 vuln(s) • impact score: 14
+    agents:       claude-desktop-agent (100%)
+    credentials:  YOUTUBE_API_KEY (100%)
+    tools:        read_file, execute_command, web_search (3 of 8 — 38%)
+    mitigates:    LLM05 LLM06 AML.T0010 AML.T0062
+    ⚠ if not fixed: attacker exploiting CVE-2025-1234 can reach
+      claude-desktop-agent → YOUTUBE_API_KEY → execute_command
+```
+
+- **Named assets** — which specific agents, credentials, and tools are at risk
+- **Percentages** — what fraction of your total inventory each fix protects
+- **Threat tags** — which OWASP LLM + MITRE ATLAS categories are mitigated
+- **Risk narratives** — plain-text explanation of what happens if you don't remediate
+
 ### Policy-as-code
 
 ```bash
@@ -266,6 +305,24 @@ agent-bom api   # http://127.0.0.1:8422  →  /docs for Swagger UI
 
 ---
 
+## Cloud UI
+
+The Next.js dashboard (`ui/`) provides an enterprise-grade web interface on top of the REST API:
+
+- **Security posture dashboard** — fleet-wide severity distribution, scan source breakdown, top vulnerable packages across all scans
+- **Vulnerability explorer** — group by severity, package, or agent with full-text search
+- **Scan detail** — per-job blast radius table, threat framework matrix, remediation plan with impact bars
+- **Severity chart** — stacked bar chart with critical/high/medium/low percentage breakdown
+- **Source tracking** — each finding tagged by source (MCP agents, container images, K8s pods, SBOMs)
+
+```bash
+cd ui && npm install && npm run dev   # http://localhost:3000
+```
+
+Requires the REST API backend running on port 8422.
+
+---
+
 ## agent-bom vs ToolHive
 
 These tools solve different problems and are **complementary**.
@@ -299,6 +356,9 @@ These tools solve different problems and are **complementary**.
 - [x] MITRE ATLAS adversarial ML threat mapping
 - [x] SLSA provenance + SHA256 integrity verification
 - [x] Threat framework coverage matrix (CLI + JSON + UI)
+- [x] Enterprise remediation plan with named assets + risk narratives
+- [x] Enterprise aggregate dashboard (Cloud UI)
+- [x] AI-BOM export identity (CycloneDX, SPDX, JSON, SARIF)
 - [ ] AWS Bedrock live agent + action group discovery
 - [ ] Snowflake Cortex `CREATE MCP SERVER` scanning
 - [ ] Google Vertex AI agent discovery
