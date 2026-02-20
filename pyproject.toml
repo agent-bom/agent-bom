@@ -68,6 +68,10 @@ gcp = [
 databricks = ["databricks-sdk>=0.20"]
 snowflake = ["snowflake-connector-python>=3.6"]
 nebius = ["nebius>=0.1"]
+huggingface = ["huggingface-hub>=0.20"]
+wandb = ["wandb>=0.16"]
+mlflow = ["mlflow>=2.10"]
+openai = ["openai>=1.12"]
 cloud = [
     "agent-bom[aws]",
     "agent-bom[azure]",
@@ -75,6 +79,10 @@ cloud = [
     "agent-bom[databricks]",
     "agent-bom[snowflake]",
     "agent-bom[nebius]",
+    "agent-bom[huggingface]",
+    "agent-bom[wandb]",
+    "agent-bom[mlflow]",
+    "agent-bom[openai]",
 ]
 dev = [
     "pytest>=7.0",

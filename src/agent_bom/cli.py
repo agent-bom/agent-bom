@@ -154,6 +154,19 @@ def main():
 @click.option("--aws-include-step-functions", is_flag=True, help="Discover Step Functions workflows (used with --aws)")
 @click.option("--aws-include-ec2", is_flag=True, help="Discover EC2 instances by tag (used with --aws)")
 @click.option("--aws-ec2-tag", default=None, metavar="KEY=VALUE", help="EC2 tag filter for --aws-include-ec2 (e.g. 'Environment=ai-prod')")
+@click.option("--huggingface", "hf_flag", is_flag=True, help="Discover models, Spaces, and endpoints from Hugging Face Hub")
+@click.option("--hf-token", default=None, envvar="HF_TOKEN", metavar="TOKEN", help="Hugging Face API token")
+@click.option("--hf-username", default=None, metavar="USER", help="Hugging Face username to scope discovery")
+@click.option("--hf-organization", default=None, metavar="ORG", help="Hugging Face organization to scope discovery")
+@click.option("--wandb", "wandb_flag", is_flag=True, help="Discover runs and artifacts from Weights & Biases")
+@click.option("--wandb-api-key", default=None, envvar="WANDB_API_KEY", metavar="KEY", help="W&B API key")
+@click.option("--wandb-entity", default=None, envvar="WANDB_ENTITY", metavar="ENTITY", help="W&B entity (team or user)")
+@click.option("--wandb-project", default=None, metavar="PROJECT", help="W&B project name")
+@click.option("--mlflow", "mlflow_flag", is_flag=True, help="Discover models and experiments from MLflow")
+@click.option("--mlflow-tracking-uri", default=None, envvar="MLFLOW_TRACKING_URI", metavar="URI", help="MLflow tracking server URI")
+@click.option("--openai", "openai_flag", is_flag=True, help="Discover assistants and fine-tuned models from OpenAI")
+@click.option("--openai-api-key", default=None, envvar="OPENAI_API_KEY", metavar="KEY", help="OpenAI API key")
+@click.option("--openai-org-id", default=None, envvar="OPENAI_ORG_ID", metavar="ORG", help="OpenAI organization ID")
 def scan(
     project: Optional[str],
     config_dir: Optional[str],
@@ -203,6 +216,19 @@ def scan(
     aws_include_step_functions: bool,
     aws_include_ec2: bool,
     aws_ec2_tag: Optional[str],
+    hf_flag: bool,
+    hf_token: Optional[str],
+    hf_username: Optional[str],
+    hf_organization: Optional[str],
+    wandb_flag: bool,
+    wandb_api_key: Optional[str],
+    wandb_entity: Optional[str],
+    wandb_project: Optional[str],
+    mlflow_flag: bool,
+    mlflow_tracking_uri: Optional[str],
+    openai_flag: bool,
+    openai_api_key: Optional[str],
+    openai_org_id: Optional[str],
 ):
     """Discover agents, extract dependencies, scan for vulnerabilities.
 
@@ -268,6 +294,14 @@ def scan(
             reads.append("  [green]Would query:[/green]  Snowflake Cortex Agents/MCP Servers/Search/Snowpark/Streamlit APIs")
         if nebius_flag:
             reads.append("  [green]Would query:[/green]  Nebius K8s/Container APIs")
+        if hf_flag:
+            reads.append("  [green]Would query:[/green]  Hugging Face Hub Models/Spaces/Endpoints APIs")
+        if wandb_flag:
+            reads.append("  [green]Would query:[/green]  W&B Runs/Artifacts/Model Registry APIs")
+        if mlflow_flag:
+            reads.append("  [green]Would query:[/green]  MLflow Tracking Server (models, experiments)")
+        if openai_flag:
+            reads.append("  [green]Would query:[/green]  OpenAI Assistants/Fine-tuning APIs")
         for line in reads:
             con.print(line)
         con.print()
@@ -355,13 +389,14 @@ def scan(
     else:
         agents = discover_all(project_dir=project)
 
-    any_cloud = aws or azure_flag or gcp_flag or databricks_flag or snowflake_flag or nebius_flag
+    any_cloud = aws or azure_flag or gcp_flag or databricks_flag or snowflake_flag or nebius_flag or hf_flag or wandb_flag or mlflow_flag or openai_flag
     if not agents and not images and not k8s and not tf_dirs and not gha_path and not agent_projects and not any_cloud:
         con.print("\n[yellow]No MCP configurations found.[/yellow]")
         con.print(
             "  Use --project, --config-dir, --inventory, --image, --k8s, "
             "--tf-dir, --gha, --agent-project, --aws, --azure, --gcp, "
-            "--databricks, --snowflake, or --nebius to specify a target."
+            "--databricks, --snowflake, --nebius, --huggingface, --wandb, "
+            "--mlflow, or --openai to specify a target."
         )
         sys.exit(0)
 
@@ -513,6 +548,14 @@ def scan(
         cloud_providers.append(("snowflake", {}))
     if nebius_flag:
         cloud_providers.append(("nebius", {"api_key": nebius_api_key, "project_id": nebius_project_id}))
+    if hf_flag:
+        cloud_providers.append(("huggingface", {"token": hf_token, "username": hf_username, "organization": hf_organization}))
+    if wandb_flag:
+        cloud_providers.append(("wandb", {"api_key": wandb_api_key, "entity": wandb_entity, "project": wandb_project}))
+    if mlflow_flag:
+        cloud_providers.append(("mlflow", {"tracking_uri": mlflow_tracking_uri}))
+    if openai_flag:
+        cloud_providers.append(("openai", {"api_key": openai_api_key, "organization": openai_org_id}))
 
     for provider_name, provider_kwargs in cloud_providers:
         from agent_bom.cloud import CloudDiscoveryError, discover_from_provider

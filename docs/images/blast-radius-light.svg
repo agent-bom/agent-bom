@@ -1,162 +1,157 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 480" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" fill="none">
   <style>
-    .title { font: 700 14px system-ui, -apple-system, sans-serif; fill: #0f172a; }
-    .subtitle { font: 400 11px system-ui, sans-serif; fill: #64748b; }
-    .layer { font: 700 9px system-ui, sans-serif; letter-spacing: 0.1em; fill: #94a3b8; }
-    .node-label { font: 600 10.5px system-ui, sans-serif; }
-    .node-sub { font: 400 9px system-ui, sans-serif; fill: #64748b; }
-    .tag { font: 600 8px 'SF Mono', 'Cascadia Code', monospace; }
-    .legend-title { font: 700 9px system-ui, sans-serif; fill: #475569; letter-spacing: 0.05em; }
-    .legend-text { font: 400 9px system-ui, sans-serif; fill: #64748b; }
-    .legend-code { font: 500 8.5px 'SF Mono', monospace; }
-    .conn { stroke: #d1d5db; stroke-width: 1.2; fill: none; }
-    .conn-red { stroke: #fca5a5; stroke-width: 1.8; fill: none; }
+    .title { font: 700 15px system-ui, -apple-system, sans-serif; fill: #1f2328; }
+    .subtitle { font: 400 11px system-ui, sans-serif; fill: #656d76; }
+    .phase-label { font: 700 9px system-ui, sans-serif; letter-spacing: 0.1em; }
+    .node-name { font: 600 11px system-ui, sans-serif; }
+    .node-detail { font: 400 9px system-ui, sans-serif; fill: #656d76; }
+    .badge { font: 700 8px 'SF Mono', monospace; }
+    .tag { font: 600 8.5px 'SF Mono', monospace; }
+    .flow-line { stroke-width: 2; fill: none; }
+    .dim-line { stroke: #d1d9e0; stroke-width: 1; fill: none; }
   </style>
   <defs>
-    <marker id="a" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="6" markerHeight="4.5" orient="auto">
-      <path d="M0 0L8 3L0 6Z" fill="#d1d5db"/>
+    <marker id="arr-red" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0 0L10 3.5L0 7Z" fill="#cf222e"/>
     </marker>
-    <marker id="ar" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="6" markerHeight="4.5" orient="auto">
-      <path d="M0 0L8 3L0 6Z" fill="#fca5a5"/>
-    </marker>
+    <linearGradient id="glow-red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#cf222e" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#cf222e" stop-opacity="0"/>
+    </linearGradient>
   </defs>
 
   <!-- Background -->
-  <rect width="880" height="480" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <rect width="880" height="440" rx="12" fill="#ffffff" stroke="#d1d9e0" stroke-width="1"/>
 
   <!-- Title -->
-  <text x="440" y="28" text-anchor="middle" class="title">Blast Radius — How one CVE propagates through your AI stack</text>
-  <text x="440" y="44" text-anchor="middle" class="subtitle">agent-bom maps every vulnerability to the agents, credentials, and tools it can reach</text>
+  <text x="440" y="30" text-anchor="middle" class="title">Blast Radius — How a CVE propagates through the AI stack</text>
+  <text x="440" y="48" text-anchor="middle" class="subtitle">agent-bom traces every vulnerability to the agents, credentials, and tools it can reach</text>
 
-  <!-- Layer labels (left side) -->
-  <text x="16" y="88" class="layer">AGENTS</text>
-  <text x="16" y="176" class="layer">SERVERS</text>
-  <text x="16" y="270" class="layer">TOOLS</text>
-  <text x="16" y="364" class="layer">PACKAGES</text>
+  <!-- ═══ CVE Origin ═══ -->
+  <text x="90" y="80" text-anchor="middle" class="phase-label" fill="#cf222e">VULNERABILITY</text>
 
-  <!-- ═══ Layer 1: Agents ═══ -->
-  <rect x="76" y="62" width="168" height="44" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1.2"/>
-  <text x="160" y="80" text-anchor="middle" class="node-label" fill="#1e40af">Claude Desktop</text>
-  <text x="160" y="96" text-anchor="middle" class="node-sub">OPENAI_KEY, ANTHROPIC_KEY</text>
+  <rect x="24" y="92" width="132" height="64" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="2"/>
+  <text x="90" y="112" text-anchor="middle" font-family="'SF Mono', monospace" font-size="11" font-weight="700" fill="#a40e26">CVE-2025-1234</text>
+  <text x="90" y="128" text-anchor="middle" class="node-detail">better-sqlite3@9.0</text>
+  <text x="90" y="144" text-anchor="middle" class="badge" fill="#cf222e">CRITICAL 9.8 · KEV</text>
 
-  <rect x="276" y="62" width="168" height="44" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1.2"/>
-  <text x="360" y="80" text-anchor="middle" class="node-label" fill="#1e40af">Cursor IDE</text>
-  <text x="360" y="96" text-anchor="middle" class="node-sub">ANTHROPIC_KEY, DB_URL</text>
+  <line x1="156" y1="124" x2="192" y2="124" class="flow-line" stroke="#cf222e" marker-end="url(#arr-red)"/>
 
-  <rect x="476" y="62" width="168" height="44" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1.2"/>
-  <text x="560" y="80" text-anchor="middle" class="node-label" fill="#1e40af">Windsurf</text>
-  <text x="560" y="96" text-anchor="middle" class="node-sub">AWS_SECRET, GH_TOKEN</text>
+  <!-- ═══ Package ═══ -->
+  <text x="274" y="80" text-anchor="middle" class="phase-label" fill="#1a7f37">PACKAGE</text>
 
-  <!-- Agent → Server connectors -->
-  <line x1="160" y1="106" x2="160" y2="152" class="conn" marker-end="url(#a)"/>
-  <line x1="360" y1="106" x2="340" y2="152" class="conn" marker-end="url(#a)"/>
-  <line x1="360" y1="106" x2="540" y2="152" class="conn" marker-end="url(#a)"/>
-  <line x1="560" y1="106" x2="540" y2="152" class="conn" marker-end="url(#a)"/>
-  <line x1="560" y1="106" x2="720" y2="152" class="conn" marker-end="url(#a)"/>
+  <rect x="200" y="92" width="148" height="64" rx="10" fill="#dafbe1" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="274" y="112" text-anchor="middle" class="node-name" fill="#116329">better-sqlite3</text>
+  <text x="274" y="128" text-anchor="middle" class="node-detail">npm · v9.0.0</text>
+  <rect x="236" y="134" width="76" height="14" rx="3" fill="#ffebe9" stroke="#cf222e" stroke-width="0.8"/>
+  <text x="274" y="144" text-anchor="middle" class="badge" fill="#cf222e">1 CRITICAL</text>
 
-  <!-- ═══ Layer 2: MCP Servers ═══ -->
-  <rect x="76" y="156" width="168" height="44" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.2"/>
-  <text x="160" y="174" text-anchor="middle" class="node-label" fill="#4338ca">filesystem-server</text>
-  <text x="134" y="191" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="600" fill="#16a34a">Verified</text>
+  <line x1="348" y1="124" x2="384" y2="124" class="flow-line" stroke="#cf222e" marker-end="url(#arr-red)"/>
 
-  <rect x="268" y="156" width="168" height="44" rx="8" fill="#eef2ff" stroke="#fca5a5" stroke-width="1.8"/>
-  <text x="352" y="174" text-anchor="middle" class="node-label" fill="#4338ca">sqlite-mcp</text>
-  <text x="326" y="191" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="600" fill="#dc2626">Unverified</text>
+  <!-- ═══ MCP Server ═══ -->
+  <text x="466" y="80" text-anchor="middle" class="phase-label" fill="#8250df">MCP SERVER</text>
 
-  <rect x="460" y="156" width="168" height="44" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.2"/>
-  <text x="544" y="174" text-anchor="middle" class="node-label" fill="#4338ca">puppeteer-server</text>
-  <text x="518" y="191" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="600" fill="#16a34a">Verified</text>
+  <rect x="392" y="92" width="148" height="64" rx="10" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+  <text x="466" y="112" text-anchor="middle" class="node-name" fill="#6639ba">sqlite-mcp</text>
+  <text x="466" y="128" text-anchor="middle" class="node-detail">Unverified · 3 tools</text>
+  <rect x="422" y="134" width="88" height="14" rx="3" fill="#ffebe9" stroke="#cf222e" stroke-width="0.8"/>
+  <text x="466" y="144" text-anchor="middle" class="badge" fill="#cf222e">COMPROMISED</text>
 
-  <rect x="652" y="156" width="168" height="44" rx="8" fill="#eef2ff" stroke="#fca5a5" stroke-width="1.8"/>
-  <text x="736" y="174" text-anchor="middle" class="node-label" fill="#4338ca">custom-deploy</text>
-  <text x="710" y="191" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="600" fill="#dc2626">Unverified</text>
+  <line x1="540" y1="124" x2="576" y2="124" class="flow-line" stroke="#cf222e" marker-end="url(#arr-red)"/>
 
-  <!-- Server → Tool connectors -->
-  <line x1="160" y1="200" x2="120" y2="244" class="conn" marker-end="url(#a)"/>
-  <line x1="160" y1="200" x2="228" y2="244" class="conn" marker-end="url(#a)"/>
-  <line x1="352" y1="200" x2="336" y2="244" class="conn-red" marker-end="url(#ar)"/>
-  <line x1="544" y1="200" x2="446" y2="244" class="conn" marker-end="url(#a)"/>
-  <line x1="544" y1="200" x2="554" y2="244" class="conn" marker-end="url(#a)"/>
-  <line x1="736" y1="200" x2="660" y2="244" class="conn" marker-end="url(#a)"/>
-  <line x1="736" y1="200" x2="770" y2="244" class="conn" marker-end="url(#a)"/>
+  <!-- ═══ AI Agent ═══ -->
+  <text x="658" y="80" text-anchor="middle" class="phase-label" fill="#0969da">AI AGENT</text>
 
-  <!-- ═══ Layer 3: Tools ═══ -->
-  <rect x="76" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="120" y="264" text-anchor="middle" class="node-label" fill="#92400e">read_file</text>
-  <text x="120" y="278" text-anchor="middle" class="tag" fill="#7c3aed">LLM07</text>
+  <rect x="584" y="92" width="148" height="64" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+  <text x="658" y="112" text-anchor="middle" class="node-name" fill="#0550ae">Cursor IDE</text>
+  <text x="658" y="128" text-anchor="middle" class="node-detail">4 servers · 12 tools</text>
+  <rect x="614" y="134" width="88" height="14" rx="3" fill="#ffebe9" stroke="#cf222e" stroke-width="0.8"/>
+  <text x="658" y="144" text-anchor="middle" class="badge" fill="#cf222e">AT RISK</text>
 
-  <rect x="184" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="228" y="264" text-anchor="middle" class="node-label" fill="#92400e">write_file</text>
-  <text x="228" y="278" text-anchor="middle" class="tag" fill="#7c3aed">LLM02</text>
+  <!-- Propagation glow -->
+  <rect x="24" y="166" width="708" height="4" rx="2" fill="url(#glow-red)"/>
+  <rect x="24" y="166" width="708" height="4" rx="2" fill="#cf222e" opacity="0.06"/>
 
-  <rect x="292" y="248" width="88" height="36" rx="6" fill="#fff1f2" stroke="#fca5a5" stroke-width="1.8"/>
-  <text x="336" y="264" text-anchor="middle" class="node-label" fill="#92400e">query_db</text>
-  <text x="336" y="278" text-anchor="middle" class="tag" fill="#7c3aed">LLM06</text>
+  <!-- ═══ What attacker reaches ═══ -->
+  <text x="440" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#1f2328">What an attacker can reach</text>
 
-  <rect x="402" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="446" y="264" text-anchor="middle" class="node-label" fill="#92400e">navigate</text>
-  <text x="446" y="278" text-anchor="middle" class="tag" fill="#7c3aed">LLM02</text>
+  <!-- Credentials -->
+  <text x="60" y="236" class="phase-label" fill="#bf8700">CREDENTIALS EXPOSED</text>
 
-  <rect x="510" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="554" y="264" text-anchor="middle" class="node-label" fill="#92400e">screenshot</text>
-  <text x="554" y="278" text-anchor="middle" class="tag" fill="#7c3aed">LLM06</text>
+  <rect x="60" y="246" width="120" height="38" rx="7" fill="#fff8c5" stroke="#bf8700" stroke-width="1.2"/>
+  <text x="120" y="262" text-anchor="middle" class="node-name" fill="#7d4e00">ANTHROPIC_KEY</text>
+  <text x="120" y="276" text-anchor="middle" class="node-detail">API access</text>
 
-  <rect x="618" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="662" y="264" text-anchor="middle" class="node-label" fill="#92400e">run_shell</text>
-  <text x="662" y="278" text-anchor="middle" class="tag" fill="#dc2626">LLM08</text>
+  <rect x="196" y="246" width="120" height="38" rx="7" fill="#fff8c5" stroke="#bf8700" stroke-width="1.2"/>
+  <text x="256" y="262" text-anchor="middle" class="node-name" fill="#7d4e00">DB_URL</text>
+  <text x="256" y="276" text-anchor="middle" class="node-detail">Database connection</text>
 
-  <rect x="726" y="248" width="88" height="36" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1.2"/>
-  <text x="770" y="264" text-anchor="middle" class="node-label" fill="#92400e">deploy</text>
-  <text x="770" y="278" text-anchor="middle" class="tag" fill="#dc2626">LLM08</text>
+  <rect x="332" y="246" width="120" height="38" rx="7" fill="#fff8c5" stroke="#bf8700" stroke-width="1.2"/>
+  <text x="392" y="262" text-anchor="middle" class="node-name" fill="#7d4e00">AWS_SECRET</text>
+  <text x="392" y="276" text-anchor="middle" class="node-detail">Cloud access</text>
 
-  <!-- Tool → Package connectors -->
-  <line x1="120" y1="284" x2="148" y2="332" class="conn" marker-end="url(#a)"/>
-  <line x1="336" y1="284" x2="340" y2="332" class="conn-red" marker-end="url(#ar)"/>
-  <line x1="446" y1="284" x2="524" y2="332" class="conn" marker-end="url(#a)"/>
-  <line x1="554" y1="284" x2="524" y2="332" class="conn" marker-end="url(#a)"/>
-  <line x1="662" y1="284" x2="710" y2="332" class="conn" marker-end="url(#a)"/>
-  <line x1="770" y1="284" x2="710" y2="332" class="conn" marker-end="url(#a)"/>
+  <!-- Tools -->
+  <text x="60" y="310" class="phase-label" fill="#9a6700">TOOLS REACHABLE</text>
 
-  <!-- ═══ Layer 4: Packages ═══ -->
-  <rect x="76" y="336" width="152" height="36" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.2"/>
-  <text x="152" y="352" text-anchor="middle" font-family="'SF Mono', monospace" font-size="9.5" font-weight="600" fill="#166534">glob@7.1.6</text>
-  <text x="152" y="366" text-anchor="middle" class="node-sub">npm</text>
+  <rect x="60" y="320" width="90" height="32" rx="6" fill="#f6f8fa" stroke="#9a6700" stroke-width="1"/>
+  <text x="105" y="340" text-anchor="middle" class="tag" fill="#7d4e00">query_db</text>
 
-  <rect x="260" y="336" width="172" height="36" rx="6" fill="#fff1f2" stroke="#fca5a5" stroke-width="1.8"/>
-  <text x="346" y="352" text-anchor="middle" font-family="'SF Mono', monospace" font-size="9.5" font-weight="600" fill="#166534">better-sqlite3@9.0</text>
-  <text x="346" y="366" text-anchor="middle" class="node-sub">npm</text>
+  <rect x="164" y="320" width="90" height="32" rx="6" fill="#f6f8fa" stroke="#9a6700" stroke-width="1"/>
+  <text x="209" y="340" text-anchor="middle" class="tag" fill="#7d4e00">read_file</text>
 
-  <rect x="464" y="336" width="152" height="36" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.2"/>
-  <text x="540" y="352" text-anchor="middle" font-family="'SF Mono', monospace" font-size="9.5" font-weight="600" fill="#166534">puppeteer@21.6</text>
-  <text x="540" y="366" text-anchor="middle" class="node-sub">npm</text>
+  <rect x="268" y="320" width="90" height="32" rx="6" fill="#f6f8fa" stroke="#9a6700" stroke-width="1"/>
+  <text x="313" y="340" text-anchor="middle" class="tag" fill="#7d4e00">write_file</text>
 
-  <rect x="648" y="336" width="152" height="36" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.2"/>
-  <text x="724" y="352" text-anchor="middle" font-family="'SF Mono', monospace" font-size="9.5" font-weight="600" fill="#166534">langchain@0.1.5</text>
-  <text x="724" y="366" text-anchor="middle" class="node-sub">pypi</text>
+  <rect x="372" y="320" width="90" height="32" rx="6" fill="#ffebe9" stroke="#cf222e" stroke-width="1.5"/>
+  <text x="417" y="340" text-anchor="middle" class="tag" fill="#a40e26">run_shell</text>
 
-  <!-- CVE callout -->
-  <line x1="346" y1="372" x2="346" y2="394" class="conn-red" marker-end="url(#ar)"/>
-  <rect x="268" y="398" width="156" height="40" rx="6" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
-  <text x="346" y="416" text-anchor="middle" font-family="'SF Mono', monospace" font-size="10" font-weight="700" fill="#dc2626">CVE-2024-XXXX</text>
-  <text x="346" y="432" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" fill="#991b1b">CRITICAL 9.8 · EPSS 87% · KEV</text>
+  <!-- Threat tags -->
+  <text x="60" y="376" class="phase-label" fill="#8250df">THREAT FRAMEWORKS TRIGGERED</text>
 
-  <!-- Blast radius highlight zone -->
-  <rect x="258" y="150" width="184" height="296" rx="10" fill="#fef2f2" fill-opacity="0.3" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="350" y="460" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="700" fill="#dc2626" letter-spacing="0.08em">BLAST RADIUS</text>
+  <rect x="60" y="386" width="60" height="20" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="0.8"/>
+  <text x="90" y="400" text-anchor="middle" class="tag" fill="#6639ba">LLM02</text>
 
-  <!-- ═══ Legend ═══ -->
-  <g transform="translate(660, 398)">
-    <rect width="200" height="72" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="100" y="14" text-anchor="middle" class="legend-title">THREAT FRAMEWORKS</text>
-    <text x="12" y="30" class="legend-code" fill="#7c3aed">LLM02</text>
-    <text x="56" y="30" class="legend-text">Insecure Output</text>
-    <text x="12" y="44" class="legend-code" fill="#7c3aed">LLM05</text>
-    <text x="56" y="44" class="legend-text">Supply Chain</text>
-    <text x="110" y="30" class="legend-code" fill="#7c3aed">LLM06</text>
-    <text x="154" y="30" class="legend-text">Info Leak</text>
-    <text x="110" y="44" class="legend-code" fill="#dc2626">LLM08</text>
-    <text x="154" y="44" class="legend-text">Excess Agency</text>
-    <text x="12" y="62" class="legend-code" fill="#0891b2">AML.T0010</text>
-    <text x="72" y="62" class="legend-text">Supply Chain Compromise</text>
-  </g>
+  <rect x="130" y="386" width="60" height="20" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="0.8"/>
+  <text x="160" y="400" text-anchor="middle" class="tag" fill="#6639ba">LLM05</text>
+
+  <rect x="200" y="386" width="60" height="20" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="0.8"/>
+  <text x="230" y="400" text-anchor="middle" class="tag" fill="#6639ba">LLM06</text>
+
+  <rect x="270" y="386" width="60" height="20" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="0.8"/>
+  <text x="300" y="400" text-anchor="middle" class="tag" fill="#6639ba">LLM08</text>
+
+  <rect x="348" y="386" width="82" height="20" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+  <text x="389" y="400" text-anchor="middle" class="tag" fill="#0550ae">AML.T0010</text>
+
+  <rect x="440" y="386" width="82" height="20" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+  <text x="481" y="400" text-anchor="middle" class="tag" fill="#0550ae">AML.T0062</text>
+
+  <!-- ═══ Impact Summary ═══ -->
+  <rect x="560" y="220" width="296" height="196" rx="10" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1"/>
+  <text x="708" y="244" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#1f2328">Impact Summary</text>
+
+  <text x="584" y="272" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#cf222e">1</text>
+  <text x="608" y="268" class="node-name" fill="#656d76">agent affected</text>
+  <text x="608" y="280" class="node-detail">Cursor IDE (100% of env)</text>
+
+  <line x1="580" y1="290" x2="840" y2="290" class="dim-line"/>
+
+  <text x="584" y="312" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#bf8700">3</text>
+  <text x="608" y="308" class="node-name" fill="#656d76">credentials exposed</text>
+  <text x="608" y="320" class="node-detail">ANTHROPIC_KEY, DB_URL, AWS_SECRET</text>
+
+  <line x1="580" y1="330" x2="840" y2="330" class="dim-line"/>
+
+  <text x="584" y="352" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#9a6700">4</text>
+  <text x="608" y="348" class="node-name" fill="#656d76">tools reachable</text>
+  <text x="608" y="360" class="node-detail">incl. run_shell (RCE risk)</text>
+
+  <line x1="580" y1="370" x2="840" y2="370" class="dim-line"/>
+
+  <text x="584" y="392" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#8250df">6</text>
+  <text x="608" y="388" class="node-name" fill="#656d76">threat categories</text>
+  <text x="608" y="400" class="node-detail">4 OWASP LLM + 2 MITRE ATLAS</text>
+
+  <rect x="580" y="406" width="260" height="2" rx="1" fill="#1a7f37" opacity="0.4"/>
+  <text x="710" y="424" text-anchor="middle" font-family="'SF Mono', monospace" font-size="9" font-weight="600" fill="#1a7f37">FIX: upgrade better-sqlite3 → 11.7.0</text>
 </svg>
