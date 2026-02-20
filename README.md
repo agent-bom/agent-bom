@@ -421,8 +421,7 @@ Unverified servers in your configs trigger a warning. Policy rules can block the
 |------|---------|----------|
 | Developer CLI | `agent-bom scan` | Local audit, pre-commit checks |
 | Pre-install check | `agent-bom check express@4.18.2 -e npm` | Before running any MCP server |
-| GitHub Action | `uses: agent-bom/agent-bom@v0.13.0` | CI/CD gate + Security tab |
-| VS Code | Extension with diagnostics + status bar | Inline vulnerability alerts |
+| GitHub Action | `uses: agent-bom/agent-bom@v0.14.0` | CI/CD gate + Security tab |
 | Docker | `docker run agentbom/agent-bom scan` | Isolated, reproducible scans |
 | REST API | `agent-bom api` | Dashboards, SIEM, scripting |
 | Dashboard | `agent-bom serve` | Team-visible security dashboard |
@@ -437,7 +436,7 @@ Use agent-bom directly in your CI/CD pipeline:
 
 ```yaml
 - name: AI supply chain scan
-  uses: agent-bom/agent-bom@v0.13.0
+  uses: agent-bom/agent-bom@v0.14.0
   with:
     severity-threshold: high
     upload-sarif: true
@@ -446,7 +445,7 @@ Use agent-bom directly in your CI/CD pipeline:
 Full options:
 
 ```yaml
-- uses: agent-bom/agent-bom@v0.13.0
+- uses: agent-bom/agent-bom@v0.14.0
   with:
     severity-threshold: high        # fail on high+ CVEs
     policy: policy.json             # policy-as-code gates
@@ -483,23 +482,6 @@ pip install agent-bom[ai-enrich]
 export OPENAI_API_KEY=sk-...
 agent-bom scan --ai-enrich --ai-model openai/gpt-4o-mini
 ```
-
----
-
-## VS Code extension
-
-Scan MCP configurations directly from VS Code with diagnostics and a results panel:
-
-```bash
-cd vscode-extension && npm install && npm run compile
-# Press F5 in VS Code to launch Extension Development Host
-```
-
-Commands:
-- **agent-bom: Scan Workspace** — runs CLI, shows diagnostics on MCP config files
-- **agent-bom: Show Results** — webview panel with vulnerability table
-
-Status bar shows vulnerability count after each scan.
 
 ---
 
