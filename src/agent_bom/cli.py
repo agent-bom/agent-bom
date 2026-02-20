@@ -23,6 +23,7 @@ from agent_bom.output import (
     print_agent_tree,
     print_blast_radius,
     print_diff,
+    print_export_hint,
     print_policy_results,
     print_remediation_plan,
     print_severity_chart,
@@ -536,6 +537,7 @@ def scan(
         print_blast_radius(report)
         print_threat_frameworks(report)
         print_remediation_plan(report)
+        print_export_hint(report)
     elif output_format == "text" and not output:
         _print_text(report, blast_radii)
     elif output_format == "json":

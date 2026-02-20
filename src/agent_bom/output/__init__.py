@@ -429,6 +429,22 @@ def print_remediation_plan(report: AIBOMReport) -> None:
         console.print()
 
 
+def print_export_hint(report: AIBOMReport) -> None:
+    """Print an AI-BOM identity footer with export hints."""
+    console.print()
+    console.print(Panel.fit(
+        "[bold]AI Bill of Materials (AI-BOM)[/bold]\n"
+        f"[dim]{report.total_agents} agents · {report.total_servers} MCP servers · "
+        f"{report.total_packages} packages · {report.total_vulnerabilities} vulnerabilities[/dim]\n\n"
+        "[dim]Export this AI-BOM:[/dim]\n"
+        "  [green]agent-bom scan -f cyclonedx -o ai-bom.cdx.json[/green]   [dim]CycloneDX 1.6[/dim]\n"
+        "  [green]agent-bom scan -f spdx -o ai-bom.spdx.json[/green]       [dim]SPDX 3.0[/dim]\n"
+        "  [green]agent-bom scan -f json -o ai-bom.json[/green]            [dim]Full AI-BOM[/dim]\n"
+        "  [green]agent-bom scan -f sarif -o results.sarif[/green]         [dim]GitHub Security[/dim]",
+        border_style="dim",
+    ))
+
+
 def _pct(part: int, total: int) -> str:
     """Format a percentage string."""
     return f"{round(part / total * 100)}%" if total > 0 else "—"
@@ -535,6 +551,8 @@ def _build_framework_summary(blast_radii: list[BlastRadius]) -> dict:
 def to_json(report: AIBOMReport) -> dict:
     """Convert report to JSON-serializable dict."""
     return {
+        "document_type": "AI-BOM",
+        "spec_version": "1.0",
         "ai_bom_version": report.tool_version,
         "generated_at": report.generated_at.isoformat(),
         "summary": {

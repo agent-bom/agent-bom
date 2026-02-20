@@ -2663,3 +2663,19 @@ def test_print_remediation_no_crash(sample_report):
 
     # Should not raise
     print_remediation_plan(sample_report)
+
+
+def test_json_ai_bom_identity(sample_report):
+    """JSON output declares document_type and spec_version for AI-BOM identity."""
+    data = to_json(sample_report)
+    assert data["document_type"] == "AI-BOM"
+    assert data["spec_version"] == "1.0"
+    assert "ai_bom_version" in data
+
+
+def test_print_export_hint_no_crash(sample_report):
+    """print_export_hint() doesn't crash with valid report."""
+    from agent_bom.output import print_export_hint
+
+    # Should not raise
+    print_export_hint(sample_report)
