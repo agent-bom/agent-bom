@@ -69,12 +69,15 @@ runs:
 
     - name: Install agent-bom
       shell: bash
+      env:
+        AGENT_BOM_VERSION: ${{ inputs.agent-bom-version }}
+        AI_ENRICH: ${{ inputs.ai-enrich }}
       run: |
         PKG="agent-bom"
-        if [ -n "${{ inputs.agent-bom-version }}" ]; then
-          PKG="agent-bom==${{ inputs.agent-bom-version }}"
+        if [ -n "$AGENT_BOM_VERSION" ]; then
+          PKG="agent-bom==$AGENT_BOM_VERSION"
         fi
-        if [ "${{ inputs.ai-enrich }}" = "true" ]; then
+        if [ "$AI_ENRICH" = "true" ]; then
           pip install "${PKG}[ai-enrich]"
         else
           pip install "$PKG"
@@ -83,48 +86,56 @@ runs:
     - name: Run agent-bom scan
       id: scan
       shell: bash
+      env:
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_SEVERITY: ${{ inputs.severity-threshold }}
+        INPUT_POLICY: ${{ inputs.policy }}
+        INPUT_ENRICH: ${{ inputs.enrich }}
+        INPUT_FAIL_ON_KEV: ${{ inputs.fail-on-kev }}
+        INPUT_AI_ENRICH: ${{ inputs.ai-enrich }}
+        INPUT_AI_MODEL: ${{ inputs.ai-model }}
       run: |
         SARIF_FILE="agent-bom-results.sarif"
-        CMD="agent-bom scan"
+        ARGS="scan"
 
         # Output format
-        if [ "${{ inputs.format }}" = "sarif" ]; then
-          CMD="$CMD -f sarif -o $SARIF_FILE"
-        else
-          CMD="$CMD -f ${{ inputs.format }}"
+        if [ "$INPUT_FORMAT" = "sarif" ]; then
+          ARGS="$ARGS -f sarif -o $SARIF_FILE"
+        elif [ -n "$INPUT_FORMAT" ]; then
+          ARGS="$ARGS -f $INPUT_FORMAT"
         fi
 
         # Severity gate
-        if [ -n "${{ inputs.severity-threshold }}" ]; then
-          CMD="$CMD --fail-on-severity ${{ inputs.severity-threshold }}"
+        if [ -n "$INPUT_SEVERITY" ]; then
+          ARGS="$ARGS --fail-on-severity $INPUT_SEVERITY"
         fi
 
         # Policy file
-        if [ -n "${{ inputs.policy }}" ]; then
-          CMD="$CMD --policy ${{ inputs.policy }}"
+        if [ -n "$INPUT_POLICY" ]; then
+          ARGS="$ARGS --policy $INPUT_POLICY"
         fi
 
         # Enrichment
-        if [ "${{ inputs.enrich }}" = "true" ]; then
-          CMD="$CMD --enrich"
+        if [ "$INPUT_ENRICH" = "true" ]; then
+          ARGS="$ARGS --enrich"
         fi
 
         # KEV gate
-        if [ "${{ inputs.fail-on-kev }}" = "true" ]; then
-          CMD="$CMD --fail-on-kev"
+        if [ "$INPUT_FAIL_ON_KEV" = "true" ]; then
+          ARGS="$ARGS --fail-on-kev"
         fi
 
         # AI enrichment
-        if [ "${{ inputs.ai-enrich }}" = "true" ]; then
-          CMD="$CMD --ai-enrich"
-          if [ -n "${{ inputs.ai-model }}" ]; then
-            CMD="$CMD --ai-model '${{ inputs.ai-model }}'"
+        if [ "$INPUT_AI_ENRICH" = "true" ]; then
+          ARGS="$ARGS --ai-enrich"
+          if [ -n "$INPUT_AI_MODEL" ]; then
+            ARGS="$ARGS --ai-model $INPUT_AI_MODEL"
           fi
         fi
 
         # Run scan, capture exit code
         set +e
-        eval $CMD
+        agent-bom $ARGS
         EXIT_CODE=$?
         set -e
 
