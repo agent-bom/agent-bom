@@ -23,27 +23,32 @@
   <rect x="24" y="52" width="192" height="6" rx="3" fill="#3b82f6" opacity="0.8"/>
   <text x="120" y="76" text-anchor="middle" class="phase" fill="#2563eb">DISCOVERY</text>
 
-  <g transform="translate(36, 90)">
+  <g transform="translate(36, 88)">
     <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
     <text x="16" y="10" class="item-label">MCP Configs</text>
     <text x="16" y="22" class="item-sub">Claude, Cursor, Windsurf, VS Code</text>
   </g>
-  <g transform="translate(36, 126)">
+  <g transform="translate(36, 118)">
+    <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
+    <text x="16" y="10" class="item-label">Cloud Providers</text>
+    <text x="16" y="22" class="item-sub">AWS, Azure, GCP, Snowflake, +3</text>
+  </g>
+  <g transform="translate(36, 148)">
     <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
     <text x="16" y="10" class="item-label">Docker Images</text>
     <text x="16" y="22" class="item-sub">Grype + Syft deep scanning</text>
   </g>
-  <g transform="translate(36, 162)">
+  <g transform="translate(36, 178)">
     <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
     <text x="16" y="10" class="item-label">Kubernetes Pods</text>
     <text x="16" y="22" class="item-sub">kubectl multi-namespace</text>
   </g>
-  <g transform="translate(36, 198)">
+  <g transform="translate(36, 208)">
     <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
     <text x="16" y="10" class="item-label">Existing SBOMs</text>
     <text x="16" y="22" class="item-sub">CycloneDX + SPDX import</text>
   </g>
-  <g transform="translate(36, 234)">
+  <g transform="translate(36, 238)">
     <circle cx="6" cy="6" r="3.5" fill="#3b82f6" opacity="0.5"/>
     <text x="16" y="10" class="item-label">Agent Frameworks</text>
     <text x="16" y="22" class="item-sub">LangChain, CrewAI, ADK</text>
@@ -79,7 +84,7 @@
   <g transform="translate(264, 234)">
     <circle cx="6" cy="6" r="3.5" fill="#d97706" opacity="0.5"/>
     <text x="16" y="10" class="item-label">MCP Registry</text>
-    <text x="16" y="22" class="item-sub">55+ server provenance checks</text>
+    <text x="16" y="22" class="item-sub">100+ server provenance checks</text>
   </g>
 
   <!-- Arrow 2 -->
@@ -111,8 +116,8 @@
   </g>
   <g transform="translate(492, 234)">
     <circle cx="6" cy="6" r="3.5" fill="#e11d48" opacity="0.5"/>
-    <text x="16" y="10" class="item-label">Risk Scoring</text>
-    <text x="16" y="22" class="item-sub">Composite blast score + EPSS</text>
+    <text x="16" y="10" class="item-label">Dependency Graph</text>
+    <text x="16" y="22" class="item-sub">Interactive Cytoscape.js viz</text>
   </g>
 
   <!-- Arrow 3 -->
@@ -124,8 +129,8 @@
 
   <g transform="translate(720, 90)">
     <circle cx="6" cy="6" r="3.5" fill="#059669" opacity="0.5"/>
-    <text x="16" y="10" class="item-label">Console</text>
-    <text x="16" y="22" class="item-sub">Rich tables + severity chart</text>
+    <text x="16" y="10" class="item-label">Console + HTML</text>
+    <text x="16" y="22" class="item-sub">Rich tables + dashboard</text>
   </g>
   <g transform="translate(720, 126)">
     <circle cx="6" cy="6" r="3.5" fill="#059669" opacity="0.5"/>
@@ -134,12 +139,12 @@
   </g>
   <g transform="translate(720, 162)">
     <circle cx="6" cy="6" r="3.5" fill="#059669" opacity="0.5"/>
-    <text x="16" y="10" class="item-label">CycloneDX</text>
+    <text x="16" y="10" class="item-label">CycloneDX 1.6</text>
     <text x="16" y="22" class="item-sub">AI-BOM standard</text>
   </g>
   <g transform="translate(720, 198)">
     <circle cx="6" cy="6" r="3.5" fill="#059669" opacity="0.5"/>
-    <text x="16" y="10" class="item-label">SPDX 2.3</text>
+    <text x="16" y="10" class="item-label">SPDX 3.0</text>
     <text x="16" y="22" class="item-sub">License + provenance</text>
   </g>
   <g transform="translate(720, 234)">
@@ -158,10 +163,10 @@
     <text x="400" y="34" text-anchor="middle" class="footer">Read-only  ·  Agentless  ·  Never writes configs  ·  Never runs MCP servers  ·  Never stores credentials  ·  Sigstore-signed releases</text>
   </g>
 
-  <!-- Integration logos row -->
+  <!-- Integration row -->
   <g transform="translate(40, 358)">
     <rect width="800" height="44" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
     <text x="400" y="18" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#475569" letter-spacing="0.05em">INTERFACES</text>
-    <text x="400" y="34" text-anchor="middle" class="footer">CLI (pip install)  ·  REST API (FastAPI)  ·  GitHub Actions  ·  Next.js Cloud UI  ·  SARIF Upload  ·  Policy-as-Code YAML</text>
+    <text x="400" y="34" text-anchor="middle" class="footer">CLI (pip install)  ·  REST API (FastAPI)  ·  GitHub Actions  ·  Cloud UI  ·  Skills  ·  Prometheus / OTLP</text>
   </g>
 </svg>

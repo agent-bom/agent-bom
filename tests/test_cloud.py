@@ -860,3 +860,346 @@ def test_dry_run_aws_lambda_flag():
     assert result.exit_code == 0
     assert "Lambda" in result.output
     assert "ListFunctions" in result.output
+
+
+# ─── Hugging Face Provider Tests ──────────────────────────────────────────
+
+
+def _install_mock_huggingface_hub():
+    """Install a mock huggingface-hub in sys.modules."""
+    hf_hub = types.ModuleType("huggingface_hub")
+
+    mock_api_class = MagicMock()
+    hf_hub.HfApi = mock_api_class
+
+    sys.modules.setdefault("huggingface_hub", hf_hub)
+    return hf_hub
+
+
+def test_hf_missing_sdk():
+    """Helpful error when huggingface-hub is not installed."""
+    with patch.dict(sys.modules, {"huggingface_hub": None}):
+        with pytest.raises(CloudDiscoveryError, match="huggingface-hub is required"):
+            import agent_bom.cloud.huggingface as hf_mod
+            importlib.reload(hf_mod)
+            hf_mod.discover()
+
+
+def test_hf_models_discovered():
+    """HF models are discovered with framework packages extracted."""
+    _install_mock_huggingface_hub()
+    importlib.reload(importlib.import_module("agent_bom.cloud.huggingface"))
+    from agent_bom.cloud.huggingface import discover
+
+    mock_api = MagicMock()
+    mock_model = MagicMock()
+    mock_model.id = "user/my-bert-model"
+    mock_model.modelId = "user/my-bert-model"
+    mock_model.library_name = "transformers"
+    mock_model.pipeline_tag = "text-classification"
+    mock_model.tags = ["pytorch"]
+
+    mock_api.list_models.return_value = [mock_model]
+    mock_api.list_spaces.return_value = []
+    mock_api.list_inference_endpoints.return_value = []
+
+    with patch("huggingface_hub.HfApi", return_value=mock_api):
+        agents, warnings = discover(token="fake-token", username="user")
+
+    model_agents = [a for a in agents if a.source == "huggingface-model"]
+    assert len(model_agents) == 1
+    assert "my-bert-model" in model_agents[0].name
+    # Framework packages extracted
+    pkgs = model_agents[0].mcp_servers[0].packages
+    pkg_names = {p.name for p in pkgs}
+    assert "transformers" in pkg_names
+    assert "torch" in pkg_names  # from "pytorch" tag
+
+
+def test_hf_spaces_discovered():
+    """HF Spaces are discovered with SDK packages."""
+    _install_mock_huggingface_hub()
+    importlib.reload(importlib.import_module("agent_bom.cloud.huggingface"))
+    from agent_bom.cloud.huggingface import discover
+
+    mock_api = MagicMock()
+    mock_api.list_models.return_value = []
+
+    mock_space = MagicMock()
+    mock_space.id = "user/my-gradio-app"
+    mock_space.sdk = "gradio"
+    mock_api.list_spaces.return_value = [mock_space]
+    mock_api.list_inference_endpoints.return_value = []
+
+    with patch("huggingface_hub.HfApi", return_value=mock_api):
+        agents, warnings = discover(token="fake-token", username="user")
+
+    space_agents = [a for a in agents if a.source == "huggingface-space"]
+    assert len(space_agents) == 1
+    assert "gradio-app" in space_agents[0].name
+    pkgs = space_agents[0].mcp_servers[0].packages
+    assert any(p.name == "gradio" for p in pkgs)
+
+
+def test_hf_extract_framework_packages():
+    """Framework package extraction maps library names to PyPI packages."""
+    _install_mock_huggingface_hub()
+    importlib.reload(importlib.import_module("agent_bom.cloud.huggingface"))
+    from agent_bom.cloud.huggingface import _extract_framework_packages
+
+    pkgs = _extract_framework_packages("transformers", ["pytorch", "safetensors"])
+    names = {p.name for p in pkgs}
+    assert "transformers" in names
+    assert "torch" in names
+    assert "safetensors" in names
+    assert all(p.ecosystem == "pypi" for p in pkgs)
+
+    # No duplicates
+    pkgs2 = _extract_framework_packages("pytorch", ["pytorch"])
+    assert len(pkgs2) == 1
+
+
+# ─── W&B Provider Tests ──────────────────────────────────────────────────
+
+
+def _install_mock_wandb():
+    """Install a mock wandb in sys.modules."""
+    wandb = types.ModuleType("wandb")
+    wandb.Api = MagicMock
+    sys.modules.setdefault("wandb", wandb)
+    return wandb
+
+
+def test_wandb_missing_sdk():
+    """Helpful error when wandb is not installed."""
+    with patch.dict(sys.modules, {"wandb": None}):
+        with pytest.raises(CloudDiscoveryError, match="wandb is required"):
+            import agent_bom.cloud.wandb_provider as wb_mod
+            importlib.reload(wb_mod)
+            wb_mod.discover()
+
+
+def test_wandb_requirement_parsing():
+    """W&B requirement strings are parsed into Package objects."""
+    _install_mock_wandb()
+    importlib.reload(importlib.import_module("agent_bom.cloud.wandb_provider"))
+    from agent_bom.cloud.wandb_provider import _parse_requirement
+
+    pkg = _parse_requirement("torch==2.1.0")
+    assert pkg.name == "torch"
+    assert pkg.version == "2.1.0"
+    assert pkg.ecosystem == "pypi"
+
+    pkg2 = _parse_requirement("numpy>=1.24")
+    assert pkg2.name == "numpy"
+    assert pkg2.version == "1.24"
+
+    pkg3 = _parse_requirement("transformers[torch]==4.36.0")
+    assert pkg3.name == "transformers"
+    assert pkg3.version == "4.36.0"
+
+    assert _parse_requirement("") is None
+    assert _parse_requirement("# comment") is None
+    assert _parse_requirement("-e .") is None
+
+
+def test_wandb_metadata_extraction():
+    """Package metadata is extracted from W&B run config."""
+    _install_mock_wandb()
+    importlib.reload(importlib.import_module("agent_bom.cloud.wandb_provider"))
+    from agent_bom.cloud.wandb_provider import _extract_packages_from_metadata
+
+    config = {"_wandb": {"requirements": ["torch==2.1.0", "numpy==1.24.0"]}}
+    metadata = {}
+    pkgs = _extract_packages_from_metadata(config, metadata)
+    names = {p.name for p in pkgs}
+    assert "torch" in names
+    assert "numpy" in names
+
+
+# ─── MLflow Provider Tests ────────────────────────────────────────────────
+
+
+def _install_mock_mlflow():
+    """Install a mock mlflow in sys.modules."""
+    mlflow = types.ModuleType("mlflow")
+    mlflow.MlflowClient = MagicMock
+    sys.modules.setdefault("mlflow", mlflow)
+    return mlflow
+
+
+def test_mlflow_missing_sdk():
+    """Helpful error when mlflow is not installed."""
+    with patch.dict(sys.modules, {"mlflow": None}):
+        with pytest.raises(CloudDiscoveryError, match="mlflow is required"):
+            import agent_bom.cloud.mlflow_provider as ml_mod
+            importlib.reload(ml_mod)
+            ml_mod.discover()
+
+
+def test_mlflow_flavor_packages():
+    """MLflow model flavors are mapped to PyPI packages."""
+    _install_mock_mlflow()
+    importlib.reload(importlib.import_module("agent_bom.cloud.mlflow_provider"))
+    from agent_bom.cloud.mlflow_provider import _extract_flavor_packages
+
+    pkgs = _extract_flavor_packages("models:/my-model/Production/sklearn")
+    assert len(pkgs) == 1
+    assert pkgs[0].name == "scikit-learn"
+
+    pkgs2 = _extract_flavor_packages("runs:/abc123/model/pytorch")
+    assert pkgs2[0].name == "torch"
+
+    pkgs3 = _extract_flavor_packages("s3://bucket/model")
+    assert len(pkgs3) == 0
+
+
+def test_mlflow_requirements_parsing():
+    """MLflow requirements.txt content is parsed correctly."""
+    _install_mock_mlflow()
+    importlib.reload(importlib.import_module("agent_bom.cloud.mlflow_provider"))
+    from agent_bom.cloud.mlflow_provider import _parse_requirements_txt
+
+    content = "scikit-learn==1.3.0\nnumpy>=1.24\n# comment\ntorch\n"
+    pkgs = _parse_requirements_txt(content)
+    assert len(pkgs) == 3
+    assert pkgs[0].name == "scikit-learn"
+    assert pkgs[0].version == "1.3.0"
+    assert pkgs[2].name == "torch"
+    assert pkgs[2].version == "unknown"
+
+
+# ─── OpenAI Provider Tests ───────────────────────────────────────────────
+
+
+def _install_mock_openai():
+    """Install a mock openai in sys.modules."""
+    openai = types.ModuleType("openai")
+    openai.OpenAI = MagicMock
+    openai.beta = MagicMock()
+    sys.modules.setdefault("openai", openai)
+    return openai
+
+
+def test_openai_missing_sdk():
+    """Helpful error when openai is not installed."""
+    with patch.dict(sys.modules, {"openai": None}):
+        with pytest.raises(CloudDiscoveryError, match="openai is required"):
+            import agent_bom.cloud.openai_provider as oa_mod
+            importlib.reload(oa_mod)
+            oa_mod.discover()
+
+
+def test_openai_assistants_discovered():
+    """OpenAI Assistants are discovered with tools mapped."""
+    _install_mock_openai()
+    importlib.reload(importlib.import_module("agent_bom.cloud.openai_provider"))
+    from agent_bom.cloud.openai_provider import discover
+
+    mock_client = MagicMock()
+
+    # Mock assistant
+    mock_asst = MagicMock()
+    mock_asst.id = "asst_abc123"
+    mock_asst.name = "My Research Assistant"
+    mock_asst.model = "gpt-4o"
+    mock_asst.instructions = "You are a helpful research assistant."
+
+    mock_tool_ci = MagicMock()
+    mock_tool_ci.type = "code_interpreter"
+    mock_tool_fs = MagicMock()
+    mock_tool_fs.type = "file_search"
+    mock_asst.tools = [mock_tool_ci, mock_tool_fs]
+
+    mock_response = MagicMock()
+    mock_response.data = [mock_asst]
+    mock_client.beta.assistants.list.return_value = mock_response
+
+    # Mock fine-tuning (empty)
+    mock_ft_response = MagicMock()
+    mock_ft_response.data = []
+    mock_client.fine_tuning.jobs.list.return_value = mock_ft_response
+
+    with patch("openai.OpenAI", return_value=mock_client):
+        agents, warnings = discover(api_key="sk-fake-key")
+
+    asst_agents = [a for a in agents if a.source == "openai-assistant"]
+    assert len(asst_agents) == 1
+    assert "Research Assistant" in asst_agents[0].name
+    assert asst_agents[0].version == "gpt-4o"
+
+    # Tools mapped
+    tools = asst_agents[0].mcp_servers[0].tools
+    tool_names = [t.name for t in tools]
+    assert "code_interpreter" in tool_names
+    assert "file_search" in tool_names
+    assert "HIGH-RISK" in tools[0].description  # code_interpreter is flagged
+
+
+def test_openai_fine_tunes_discovered():
+    """OpenAI fine-tuned models are discovered."""
+    _install_mock_openai()
+    importlib.reload(importlib.import_module("agent_bom.cloud.openai_provider"))
+    from agent_bom.cloud.openai_provider import discover
+
+    mock_client = MagicMock()
+
+    # Empty assistants
+    mock_asst_response = MagicMock()
+    mock_asst_response.data = []
+    mock_client.beta.assistants.list.return_value = mock_asst_response
+
+    # Mock fine-tune
+    mock_ft = MagicMock()
+    mock_ft.id = "ftjob-abc123"
+    mock_ft.model = "gpt-4o-mini-2024-07-18"
+    mock_ft.fine_tuned_model = "ft:gpt-4o-mini:org::abc123"
+    mock_ft.status = "succeeded"
+    mock_ft.training_file = "file-xyz789"
+
+    mock_ft_response = MagicMock()
+    mock_ft_response.data = [mock_ft]
+    mock_client.fine_tuning.jobs.list.return_value = mock_ft_response
+
+    with patch("openai.OpenAI", return_value=mock_client):
+        agents, warnings = discover(api_key="sk-fake-key")
+
+    ft_agents = [a for a in agents if a.source == "openai-fine-tune"]
+    assert len(ft_agents) == 1
+    assert "ft:gpt-4o-mini" in ft_agents[0].name
+    assert "succeeded" in ft_agents[0].version
+
+
+# ─── CLI Dry-Run Tests for New Providers ──────────────────────────────────
+
+
+def test_dry_run_lists_huggingface_apis():
+    """--dry-run --huggingface mentions HF APIs in output."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--dry-run", "--huggingface"])
+    assert result.exit_code == 0
+    assert "Hugging Face" in result.output
+
+
+def test_dry_run_lists_wandb_apis():
+    """--dry-run --wandb mentions W&B APIs in output."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--dry-run", "--wandb"])
+    assert result.exit_code == 0
+    assert "W&B" in result.output
+
+
+def test_dry_run_lists_mlflow_apis():
+    """--dry-run --mlflow mentions MLflow in output."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--dry-run", "--mlflow"])
+    assert result.exit_code == 0
+    assert "MLflow" in result.output
+
+
+def test_dry_run_lists_openai_apis():
+    """--dry-run --openai mentions OpenAI APIs in output."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["scan", "--dry-run", "--openai"])
+    assert result.exit_code == 0
+    assert "OpenAI" in result.output
