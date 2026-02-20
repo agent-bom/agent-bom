@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-    <img src="docs/images/logo-light.svg" alt="agent-bom" width="480" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/logo-light.svg" alt="agent-bom" width="480" />
   </picture>
 </p>
 
@@ -20,15 +20,15 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.svg">
-    <img src="docs/images/architecture-light.svg" alt="agent-bom architecture" width="800" style="padding: 20px 0" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/architecture-dark.svg">
+    <img src="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/architecture-light.svg" alt="agent-bom architecture" width="800" style="padding: 20px 0" />
   </picture>
 </p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/blast-radius-dark.svg">
-    <img src="docs/images/blast-radius-light.svg" alt="Blast radius attack surface" width="800" style="padding: 20px 0" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/blast-radius-dark.svg">
+    <img src="https://raw.githubusercontent.com/agent-bom/agent-bom/main/docs/images/blast-radius-light.svg" alt="Blast radius attack surface" width="800" style="padding: 20px 0" />
   </picture>
 </p>
 
