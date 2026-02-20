@@ -178,6 +178,72 @@ def print_blast_radius(report: AIBOMReport) -> None:
                        f"Use --output to export full report.[/dim]")
 
 
+def print_threat_frameworks(report: AIBOMReport) -> None:
+    """Print aggregated threat framework coverage — OWASP LLM Top 10 + MITRE ATLAS."""
+    from collections import Counter
+
+    from agent_bom.atlas import ATLAS_TECHNIQUES
+    from agent_bom.owasp import OWASP_LLM_TOP10
+
+    if not report.blast_radii:
+        return
+
+    # Aggregate tag counts
+    owasp_counts: Counter[str] = Counter()
+    atlas_counts: Counter[str] = Counter()
+    for br in report.blast_radii:
+        for tag in br.owasp_tags:
+            owasp_counts[tag] += 1
+        for tag in br.atlas_tags:
+            atlas_counts[tag] += 1
+
+    if not owasp_counts and not atlas_counts:
+        return
+
+    console.print("\n[bold]Threat Framework Coverage[/bold]\n")
+
+    # OWASP table
+    if owasp_counts:
+        owasp_table = Table(title="OWASP LLM Top 10", title_style="bold purple", border_style="dim")
+        owasp_table.add_column("Code", width=7, style="bold purple")
+        owasp_table.add_column("Category", width=36)
+        owasp_table.add_column("Findings", width=9, justify="right")
+        owasp_table.add_column("", width=20)
+
+        for code in sorted(OWASP_LLM_TOP10.keys()):
+            count = owasp_counts.get(code, 0)
+            name = OWASP_LLM_TOP10[code]
+            if count > 0:
+                bar_len = min(count, 16)
+                bar = "[red]" + "█" * bar_len + "[/red]"
+                owasp_table.add_row(code, name, f"[bold]{count}[/bold]", bar)
+            else:
+                owasp_table.add_row(f"[dim]{code}[/dim]", f"[dim]{name}[/dim]", "[dim]—[/dim]", "")
+
+        console.print(owasp_table)
+
+    # ATLAS table
+    if atlas_counts:
+        atlas_table = Table(title="MITRE ATLAS", title_style="bold cyan", border_style="dim")
+        atlas_table.add_column("Technique", width=12, style="bold cyan")
+        atlas_table.add_column("Name", width=38)
+        atlas_table.add_column("Findings", width=9, justify="right")
+        atlas_table.add_column("", width=20)
+
+        for code in sorted(ATLAS_TECHNIQUES.keys()):
+            count = atlas_counts.get(code, 0)
+            name = ATLAS_TECHNIQUES[code]
+            if count > 0:
+                bar_len = min(count, 16)
+                bar = "[red]" + "█" * bar_len + "[/red]"
+                atlas_table.add_row(code, name, f"[bold]{count}[/bold]", bar)
+            else:
+                atlas_table.add_row(f"[dim]{code}[/dim]", f"[dim]{name}[/dim]", "[dim]—[/dim]", "")
+
+        console.print(atlas_table)
+    console.print()
+
+
 # ─── Remediation Plan ───────────────────────────────────────────────────────
 
 
@@ -276,6 +342,45 @@ def print_remediation_plan(blast_radii: list[BlastRadius]) -> None:
 # ─── JSON Output ────────────────────────────────────────────────────────────
 
 
+def _build_framework_summary(blast_radii: list[BlastRadius]) -> dict:
+    """Aggregate OWASP + ATLAS tag coverage across all blast radius findings."""
+    from collections import Counter
+
+    from agent_bom.atlas import ATLAS_TECHNIQUES
+    from agent_bom.owasp import OWASP_LLM_TOP10
+
+    owasp_counts: Counter[str] = Counter()
+    atlas_counts: Counter[str] = Counter()
+    for br in blast_radii:
+        for tag in br.owasp_tags:
+            owasp_counts[tag] += 1
+        for tag in br.atlas_tags:
+            atlas_counts[tag] += 1
+
+    return {
+        "owasp_llm_top10": [
+            {
+                "code": code,
+                "name": OWASP_LLM_TOP10[code],
+                "findings": owasp_counts.get(code, 0),
+                "triggered": code in owasp_counts,
+            }
+            for code in sorted(OWASP_LLM_TOP10.keys())
+        ],
+        "mitre_atlas": [
+            {
+                "technique_id": tid,
+                "name": ATLAS_TECHNIQUES[tid],
+                "findings": atlas_counts.get(tid, 0),
+                "triggered": tid in atlas_counts,
+            }
+            for tid in sorted(ATLAS_TECHNIQUES.keys())
+        ],
+        "total_owasp_triggered": sum(1 for c in owasp_counts if owasp_counts[c] > 0),
+        "total_atlas_triggered": sum(1 for c in atlas_counts if atlas_counts[c] > 0),
+    }
+
+
 def to_json(report: AIBOMReport) -> dict:
     """Convert report to JSON-serializable dict."""
     return {
@@ -366,6 +471,7 @@ def to_json(report: AIBOMReport) -> dict:
             }
             for br in report.blast_radii
         ],
+        "threat_framework_summary": _build_framework_summary(report.blast_radii),
     }
 
 

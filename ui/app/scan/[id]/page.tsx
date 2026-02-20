@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { api, ScanJob, ScanResult, BlastRadius, formatDate } from "@/lib/api";
+import { api, ScanJob, ScanResult, BlastRadius, formatDate, OWASP_LLM_TOP10, MITRE_ATLAS } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
 import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Zap, Shield, Key, Wrench } from "lucide-react";
 
@@ -119,6 +119,9 @@ export default function ScanResultPage({ params }: { params: Promise<{ id: strin
           </div>
         </section>
       )}
+
+      {/* Threat Framework Coverage */}
+      {blastRadius.length > 0 && <ThreatMatrix blastRadius={blastRadius} />}
 
       {/* Agent inventory */}
       {result && result.agents.length > 0 && (
@@ -261,17 +264,27 @@ function BlastRadiusCard({ blast }: { blast: BlastRadius }) {
         <ImpactPill icon={Wrench} label="Tools reachable" items={blast.reachable_tools} />
       </div>
 
-      {/* OWASP + ATLAS threat tags */}
+      {/* OWASP + ATLAS threat tags with tooltips */}
       {((blast.owasp_tags && blast.owasp_tags.length > 0) || (blast.atlas_tags && blast.atlas_tags.length > 0)) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {blast.owasp_tags?.map((tag) => (
-            <span key={tag} className="text-xs font-mono bg-purple-950 border border-purple-800 text-purple-400 rounded px-1.5 py-0.5">
+            <span
+              key={tag}
+              title={OWASP_LLM_TOP10[tag] ?? tag}
+              className="text-xs font-mono bg-purple-950 border border-purple-800 text-purple-400 rounded px-1.5 py-0.5 cursor-help"
+            >
               {tag}
+              <span className="ml-1 text-purple-600 font-sans">{OWASP_LLM_TOP10[tag]}</span>
             </span>
           ))}
           {blast.atlas_tags?.map((tag) => (
-            <span key={tag} className="text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 rounded px-1.5 py-0.5">
+            <span
+              key={tag}
+              title={MITRE_ATLAS[tag] ?? tag}
+              className="text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 rounded px-1.5 py-0.5 cursor-help"
+            >
               {tag}
+              <span className="ml-1 text-cyan-600 font-sans">{MITRE_ATLAS[tag]}</span>
             </span>
           ))}
         </div>
@@ -308,5 +321,116 @@ function ImpactPill({
         <p className="text-xs text-zinc-600">None</p>
       )}
     </div>
+  );
+}
+
+function ThreatMatrix({ blastRadius }: { blastRadius: BlastRadius[] }) {
+  // Aggregate counts
+  const owaspCounts: Record<string, number> = {};
+  const atlasCounts: Record<string, number> = {};
+
+  for (const br of blastRadius) {
+    for (const tag of br.owasp_tags ?? []) {
+      owaspCounts[tag] = (owaspCounts[tag] ?? 0) + 1;
+    }
+    for (const tag of br.atlas_tags ?? []) {
+      atlasCounts[tag] = (atlasCounts[tag] ?? 0) + 1;
+    }
+  }
+
+  const owaspTriggered = Object.keys(owaspCounts).length;
+  const atlasTriggered = Object.keys(atlasCounts).length;
+
+  if (owaspTriggered === 0 && atlasTriggered === 0) return null;
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+        Threat Framework Coverage
+      </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* OWASP LLM Top 10 */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-purple-400 uppercase tracking-wider">OWASP LLM Top 10</h3>
+            <span className="text-xs text-zinc-500">
+              {owaspTriggered}/{Object.keys(OWASP_LLM_TOP10).length} triggered
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {Object.entries(OWASP_LLM_TOP10).map(([code, name]) => {
+              const count = owaspCounts[code] ?? 0;
+              const triggered = count > 0;
+              return (
+                <div
+                  key={code}
+                  className={`flex items-center gap-3 px-2.5 py-1.5 rounded-md ${
+                    triggered ? "bg-purple-950/40" : "opacity-40"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      triggered ? "bg-purple-400" : "bg-zinc-700"
+                    }`}
+                  />
+                  <span className={`text-xs font-mono w-12 flex-shrink-0 ${triggered ? "text-purple-400" : "text-zinc-600"}`}>
+                    {code}
+                  </span>
+                  <span className={`text-xs flex-1 ${triggered ? "text-zinc-300" : "text-zinc-600"}`}>
+                    {name}
+                  </span>
+                  {triggered && (
+                    <span className="text-xs font-mono font-semibold text-purple-400">
+                      {count}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* MITRE ATLAS */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">MITRE ATLAS</h3>
+            <span className="text-xs text-zinc-500">
+              {atlasTriggered}/{Object.keys(MITRE_ATLAS).length} triggered
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {Object.entries(MITRE_ATLAS).map(([code, name]) => {
+              const count = atlasCounts[code] ?? 0;
+              const triggered = count > 0;
+              return (
+                <div
+                  key={code}
+                  className={`flex items-center gap-3 px-2.5 py-1.5 rounded-md ${
+                    triggered ? "bg-cyan-950/40" : "opacity-40"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      triggered ? "bg-cyan-400" : "bg-zinc-700"
+                    }`}
+                  />
+                  <span className={`text-xs font-mono w-20 flex-shrink-0 ${triggered ? "text-cyan-400" : "text-zinc-600"}`}>
+                    {code}
+                  </span>
+                  <span className={`text-xs flex-1 ${triggered ? "text-zinc-300" : "text-zinc-600"}`}>
+                    {name}
+                  </span>
+                  {triggered && (
+                    <span className="text-xs font-mono font-semibold text-cyan-400">
+                      {count}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

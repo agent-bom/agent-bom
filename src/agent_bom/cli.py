@@ -27,6 +27,7 @@ from agent_bom.output import (
     print_remediation_plan,
     print_severity_chart,
     print_summary,
+    print_threat_frameworks,
     push_otlp,
     push_to_gateway,
     to_cyclonedx,
@@ -533,6 +534,7 @@ def scan(
             print_agent_tree(report)
         print_severity_chart(report)
         print_blast_radius(report)
+        print_threat_frameworks(report)
         print_remediation_plan(blast_radii)
     elif output_format == "text" and not output:
         _print_text(report, blast_radii)

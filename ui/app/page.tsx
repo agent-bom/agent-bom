@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, ScanJob, ScanResult, formatDate } from "@/lib/api";
+import { api, ScanJob, ScanResult, formatDate, OWASP_LLM_TOP10, MITRE_ATLAS } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
 import { ShieldAlert, Server, Package, Bug, Zap, ArrowRight, Clock, AlertTriangle } from "lucide-react";
 
@@ -196,10 +196,10 @@ function BlastCard({ blast }: { blast: NonNullable<ScanResult["blast_radius"]>[0
         {((blast.owasp_tags && blast.owasp_tags.length > 0) || (blast.atlas_tags && blast.atlas_tags.length > 0)) && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {blast.owasp_tags?.map((tag) => (
-              <span key={tag} className="text-xs font-mono bg-purple-950 border border-purple-800 text-purple-400 rounded px-1 py-0.5">{tag}</span>
+              <span key={tag} title={OWASP_LLM_TOP10[tag] ?? tag} className="text-xs font-mono bg-purple-950 border border-purple-800 text-purple-400 rounded px-1 py-0.5 cursor-help">{tag}</span>
             ))}
             {blast.atlas_tags?.map((tag) => (
-              <span key={tag} className="text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 rounded px-1 py-0.5">{tag}</span>
+              <span key={tag} title={MITRE_ATLAS[tag] ?? tag} className="text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 rounded px-1 py-0.5 cursor-help">{tag}</span>
             ))}
           </div>
         )}
