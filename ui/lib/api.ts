@@ -37,10 +37,31 @@ export interface ScanJob {
 export interface ScanResult {
   agents: Agent[];
   blast_radius: BlastRadius[];
+  remediation_plan?: RemediationItem[];
   summary?: Summary;
   warnings?: string[];
   scan_timestamp?: string;
   tool_version?: string;
+}
+
+export interface RemediationItem {
+  package: string;
+  ecosystem: string;
+  current_version: string;
+  fixed_version: string | null;
+  severity: string;
+  is_kev: boolean;
+  impact_score: number;
+  vulnerabilities: string[];
+  affected_agents: string[];
+  agents_pct: number;
+  exposed_credentials: string[];
+  credentials_pct: number;
+  reachable_tools: string[];
+  tools_pct: number;
+  owasp_tags: string[];
+  atlas_tags: string[];
+  risk_narrative: string;
 }
 
 export interface Agent {

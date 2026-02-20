@@ -2554,3 +2554,112 @@ def test_print_threat_frameworks_empty_report():
     report = AIBOMReport(agents=[], blast_radii=[])
     # Should not raise
     print_threat_frameworks(report)
+
+
+# ─── Remediation Plan Tests ──────────────────────────────────────────────────
+
+
+def test_remediation_plan_named_assets(sample_report):
+    """Remediation plan includes named agents and credentials."""
+    from agent_bom.output import build_remediation_plan
+
+    plan = build_remediation_plan(sample_report.blast_radii)
+    assert len(plan) == 1
+    item = plan[0]
+    assert "test-agent" in item["agents"]
+    assert "API_KEY" in item["creds"]
+    assert item["package"] == "test-pkg"
+    assert item["fix"] == "1.2.3"
+
+
+def test_remediation_plan_impact_score(sample_report):
+    """Impact score accounts for agents, creds, and vulns."""
+    from agent_bom.output import build_remediation_plan
+
+    plan = build_remediation_plan(sample_report.blast_radii)
+    item = plan[0]
+    # 1 agent * 10 + 1 cred * 3 + 1 vuln = 14
+    assert item["impact"] == 14
+
+
+def test_remediation_json_in_output(sample_report):
+    """JSON output includes remediation_plan with named assets and percentages."""
+    data = to_json(sample_report)
+    assert "remediation_plan" in data
+    plan = data["remediation_plan"]
+    assert len(plan) >= 1
+    item = plan[0]
+    assert item["package"] == "test-pkg"
+    assert item["fixed_version"] == "1.2.3"
+    assert "test-agent" in item["affected_agents"]
+    assert "API_KEY" in item["exposed_credentials"]
+    assert isinstance(item["agents_pct"], int)
+    assert isinstance(item["risk_narrative"], str)
+    assert len(item["risk_narrative"]) > 10
+
+
+def test_remediation_json_percentages(sample_report):
+    """Percentage calculations are valid."""
+    data = to_json(sample_report)
+    item = data["remediation_plan"][0]
+    # 1 agent out of 1 total = 100%
+    assert item["agents_pct"] == 100
+    # 1 credential out of 1 total = 100%
+    assert item["credentials_pct"] == 100
+
+
+def test_remediation_plan_owasp_atlas_tags():
+    """Remediation plan includes OWASP and ATLAS tags from blast radii."""
+    from agent_bom.models import MCPTool
+    from agent_bom.output import build_remediation_plan
+
+    vuln = Vulnerability(id="CVE-2024-9999", summary="test", severity=Severity.HIGH, fixed_version="2.0.0")
+    pkg = Package(name="vuln-pkg", version="1.0.0", ecosystem="pypi", vulnerabilities=[vuln])
+    server = MCPServer(name="srv", command="python")
+    agent = Agent(name="my-agent", agent_type=AgentType.CLAUDE_DESKTOP, config_path="/tmp/test.json", mcp_servers=[server])
+    tool = MCPTool(name="run_shell", description="Execute commands")
+    br = BlastRadius(
+        vulnerability=vuln, package=pkg,
+        affected_servers=[server], affected_agents=[agent],
+        exposed_credentials=["AWS_KEY"], exposed_tools=[tool],
+        owasp_tags=["LLM02", "LLM05"], atlas_tags=["AML.T0010"],
+    )
+    plan = build_remediation_plan([br])
+    item = plan[0]
+    assert "LLM02" in item["owasp"]
+    assert "LLM05" in item["owasp"]
+    assert "AML.T0010" in item["atlas"]
+    assert "run_shell" in item["tools"]
+
+
+def test_remediation_risk_narrative():
+    """Risk narrative mentions CVE, credentials, and agents."""
+    from agent_bom.output import _risk_narrative
+
+    item = {
+        "vulns": ["CVE-2024-1234"],
+        "agents": ["claude-desktop"],
+        "creds": ["OPENAI_KEY"],
+        "tools": ["read_file"],
+    }
+    narrative = _risk_narrative(item)
+    assert "CVE-2024-1234" in narrative
+    assert "OPENAI_KEY" in narrative
+    assert "claude-desktop" in narrative
+    assert "read_file" in narrative
+
+
+def test_remediation_empty_blast_radii():
+    """Empty blast radii produces empty remediation plan."""
+    from agent_bom.output import build_remediation_plan
+
+    plan = build_remediation_plan([])
+    assert plan == []
+
+
+def test_print_remediation_no_crash(sample_report):
+    """print_remediation_plan() doesn't crash with valid report."""
+    from agent_bom.output import print_remediation_plan
+
+    # Should not raise
+    print_remediation_plan(sample_report)

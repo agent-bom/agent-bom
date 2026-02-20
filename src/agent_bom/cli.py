@@ -535,7 +535,7 @@ def scan(
         print_severity_chart(report)
         print_blast_radius(report)
         print_threat_frameworks(report)
-        print_remediation_plan(blast_radii)
+        print_remediation_plan(report)
     elif output_format == "text" and not output:
         _print_text(report, blast_radii)
     elif output_format == "json":

@@ -2,9 +2,9 @@
 
 import { use, useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { api, ScanJob, ScanResult, BlastRadius, formatDate, OWASP_LLM_TOP10, MITRE_ATLAS } from "@/lib/api";
+import { api, ScanJob, ScanResult, BlastRadius, RemediationItem, formatDate, OWASP_LLM_TOP10, MITRE_ATLAS, severityColor } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Zap, Shield, Key, Wrench } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Zap, Shield, Key, Wrench, ArrowUpCircle, AlertTriangle } from "lucide-react";
 
 export default function ScanResultPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -122,6 +122,11 @@ export default function ScanResultPage({ params }: { params: Promise<{ id: strin
 
       {/* Threat Framework Coverage */}
       {blastRadius.length > 0 && <ThreatMatrix blastRadius={blastRadius} />}
+
+      {/* Remediation Plan */}
+      {result?.remediation_plan && result.remediation_plan.length > 0 && (
+        <RemediationPlan items={result.remediation_plan} />
+      )}
 
       {/* Agent inventory */}
       {result && result.agents.length > 0 && (
@@ -315,6 +320,155 @@ function ImpactPill({
           ))}
           {items.length > 4 && (
             <p className="text-xs text-zinc-600">+{items.length - 4} more</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-600">None</p>
+      )}
+    </div>
+  );
+}
+
+function RemediationPlan({ items }: { items: RemediationItem[] }) {
+  const fixable = items.filter((i) => i.fixed_version);
+  const unfixable = items.filter((i) => !i.fixed_version);
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-3">
+        Remediation Plan ({fixable.length} fixable)
+      </h2>
+      <div className="space-y-3">
+        {fixable.map((item, i) => (
+          <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            {/* Header: upgrade action */}
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="flex items-center gap-3">
+                <ArrowUpCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-sm font-semibold text-zinc-100">{item.package}</span>
+                    <span className="text-xs text-zinc-500 font-mono">{item.current_version}</span>
+                    <span className="text-zinc-600">→</span>
+                    <span className="text-xs text-emerald-400 font-mono font-semibold">{item.fixed_version}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded border ${severityColor(item.severity)}`}>
+                      {item.severity}
+                    </span>
+                    {item.is_kev && (
+                      <span className="text-xs font-mono bg-red-950 border border-red-800 text-red-400 rounded px-1.5 py-0.5">KEV</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Clears {item.vulnerabilities.length} vuln{item.vulnerabilities.length !== 1 ? "s" : ""}
+                    {" · "}
+                    {item.ecosystem}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-lg font-bold font-mono text-emerald-400">{item.impact_score}</div>
+                <div className="text-xs text-zinc-600">impact</div>
+              </div>
+            </div>
+
+            {/* Impact grid: assets protected */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <ImpactBox
+                label="Agents protected"
+                items={item.affected_agents}
+                pct={item.agents_pct}
+                color="emerald"
+              />
+              <ImpactBox
+                label="Credentials freed"
+                items={item.exposed_credentials}
+                pct={item.credentials_pct}
+                color="yellow"
+              />
+              <ImpactBox
+                label="Tools secured"
+                items={item.reachable_tools}
+                pct={item.tools_pct}
+                color="blue"
+              />
+            </div>
+
+            {/* Threat tags */}
+            {(item.owasp_tags.length > 0 || item.atlas_tags.length > 0) && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                <span className="text-xs text-zinc-500 mr-1">mitigates:</span>
+                {item.owasp_tags.map((tag) => (
+                  <span key={tag} title={OWASP_LLM_TOP10[tag] ?? tag} className="text-xs font-mono bg-purple-950 border border-purple-800 text-purple-400 rounded px-1.5 py-0.5 cursor-help">
+                    {tag}
+                  </span>
+                ))}
+                {item.atlas_tags.map((tag) => (
+                  <span key={tag} title={MITRE_ATLAS[tag] ?? tag} className="text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 rounded px-1.5 py-0.5 cursor-help">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Risk narrative */}
+            <div className="flex items-start gap-2 bg-red-950/20 border border-red-900/30 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300/80">{item.risk_narrative}</p>
+            </div>
+          </div>
+        ))}
+
+        {unfixable.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-xs text-yellow-400 font-semibold mb-2">
+              {unfixable.length} package{unfixable.length !== 1 ? "s" : ""} with no fix available — monitor upstream
+            </p>
+            <div className="space-y-1">
+              {unfixable.slice(0, 5).map((item, i) => (
+                <p key={i} className="text-xs font-mono text-zinc-500">
+                  {item.package}@{item.current_version} — {item.vulnerabilities.slice(0, 3).join(", ")}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ImpactBox({
+  label, items, pct, color,
+}: {
+  label: string;
+  items: string[];
+  pct: number;
+  color: "emerald" | "yellow" | "blue";
+}) {
+  const colors = {
+    emerald: { bg: "bg-emerald-950/30", border: "border-emerald-900/50", text: "text-emerald-400", bar: "bg-emerald-500" },
+    yellow: { bg: "bg-yellow-950/30", border: "border-yellow-900/50", text: "text-yellow-400", bar: "bg-yellow-500" },
+    blue: { bg: "bg-blue-950/30", border: "border-blue-900/50", text: "text-blue-400", bar: "bg-blue-500" },
+  };
+  const c = colors[color];
+
+  return (
+    <div className={`${c.bg} border ${c.border} rounded-lg p-3`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={`text-xs font-semibold ${c.text}`}>{label}</span>
+        <span className="text-xs font-mono text-zinc-400">{pct}%</span>
+      </div>
+      {/* Progress bar */}
+      <div className="h-1.5 rounded-full bg-zinc-800 mb-2">
+        <div className={`h-1.5 rounded-full ${c.bar} transition-all duration-500`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      {items.length > 0 ? (
+        <div className="space-y-0.5">
+          {items.slice(0, 3).map((item, i) => (
+            <p key={i} className="text-xs font-mono text-zinc-400 truncate">{item}</p>
+          ))}
+          {items.length > 3 && (
+            <p className="text-xs text-zinc-600">+{items.length - 3} more</p>
           )}
         </div>
       ) : (
