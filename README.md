@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>Generate AI Bills of Materials. Scan AI agents and MCP servers for CVEs. Map blast radius. Enterprise remediation with named assets and risk narratives. OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF.</b>
+  <b>Generate AI Bills of Materials. Scan AI agents and MCP servers for CVEs. Map blast radius. Runtime MCP proxy with audit logging. Enterprise remediation automation. OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF.</b>
 </p>
 
 <p align="center">
@@ -52,7 +52,12 @@ agent-bom answers the question security teams actually need:
 - **OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF** — triple threat framework tagging on every finding
 - **AI-powered enrichment** — LLM-generated risk narratives, executive summaries, and threat chains via `--ai-enrich`
 - **109-server MCP registry** — risk levels, risk justifications, tool inventories, detail pages (incl. OpenClaw)
-- **Policy-as-code** — block unverified servers, enforce risk thresholds in CI
+- **MCP runtime proxy** — intercept JSON-RPC between client and server, audit log every `tools/call`, enforce policy in real-time
+- **Auto-discovery** — unknown packages enriched from npm/PyPI APIs with heuristic risk scoring
+- **Remediation automation** — ecosystem-specific upgrade commands + credential scope-reduction templates, export `remediation.md` / `remediation.sh`
+- **Config watch + alerting** — continuous monitoring of MCP configs with console, webhook, and file alert sinks
+- **Deep risk analysis** — tool capability taxonomy (7 categories) with dangerous combination detection
+- **Policy-as-code** — block unverified servers, enforce risk thresholds in CI, runtime tool blocking
 - **Read-only** — never writes configs, never runs servers, never stores secrets
 - **Works everywhere** — CLI, Docker, REST API, Cloud UI, CI/CD, Prometheus, Kubernetes
 
@@ -76,7 +81,7 @@ agent-bom answers the question security teams actually need:
 
 **What it outputs:**
 
-Console, HTML dashboard, SARIF, CycloneDX 1.6, SPDX 3.0, Prometheus, OTLP, JSON, REST API
+Console, HTML dashboard, SARIF, CycloneDX 1.6, SPDX 3.0, Prometheus, OTLP, JSON, REST API, remediation.md, remediation.sh
 
 </td>
 </tr>
@@ -97,6 +102,10 @@ Console, HTML dashboard, SARIF, CycloneDX 1.6, SPDX 3.0, Prometheus, OTLP, JSON,
 - **[Get started](#get-started)** — scan in 30 seconds
 - **[AI-BOM export](#ai-bom-export)** — CycloneDX, SPDX, JSON, SARIF, HTML
 - **[Remediation plan](#enterprise-remediation-plan)** — named assets, risk narratives
+- **[Remediation automation](#remediation-automation)** — `--remediate` / `--remediate-sh` with fix commands
+- **[MCP runtime proxy](#mcp-runtime-proxy)** — audit + enforce tool calls in real-time
+- **[Config watch](#config-watch--alerting)** — continuous monitoring with webhook alerts
+- **[Deep risk analysis](#deep-risk-analysis-tool-capability-taxonomy)** — tool capability taxonomy
 - **[Cloud UI](#cloud-ui)** — enterprise aggregate dashboard
 - **[CI integration](#ci-integration)** — GitHub Actions + SARIF upload
 - **[REST API](#rest-api)** — FastAPI on port 8422
@@ -138,6 +147,7 @@ No config needed. Auto-discovers Claude Desktop, Claude Code, Cursor, Windsurf, 
 | All cloud | `pip install 'agent-bom[cloud]'` |
 | REST API | `pip install 'agent-bom[api]'` |
 | Dashboard | `pip install 'agent-bom[ui]'` |
+| Config watch | `pip install 'agent-bom[watch]'` |
 | OpenTelemetry | `pip install 'agent-bom[otel]'` |
 | Docker | `docker run --rm -v ~/.config:/root/.config:ro agentbom/agent-bom scan` |
 
@@ -218,6 +228,104 @@ Introspection is **read-only** — it only calls `tools/list` and `resources/lis
 - **Server enrichment** — merge runtime data into the AI-BOM inventory
 
 Requires the MCP SDK: `pip install mcp`
+
+### MCP runtime proxy
+
+Run any MCP server through agent-bom's security proxy — intercepts all JSON-RPC messages, logs every `tools/call`, and optionally enforces policy in real-time:
+
+```bash
+# Proxy a filesystem server with audit logging
+agent-bom proxy --log audit.jsonl -- npx @modelcontextprotocol/server-filesystem /tmp
+
+# Proxy with policy enforcement
+agent-bom proxy --policy policy.json --log audit.jsonl -- npx server-filesystem /tmp
+
+# Block any tool not declared in tools/list
+agent-bom proxy --block-undeclared --log audit.jsonl -- npx server-filesystem /tmp
+```
+
+Configure your MCP client to launch through the proxy:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "agent-bom",
+      "args": ["proxy", "--log", "audit.jsonl", "--", "npx", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    }
+  }
+}
+```
+
+Audit log format (JSONL):
+```json
+{"ts": "2026-02-20T10:30:00Z", "type": "tools/call", "tool": "write_file", "args": {"path": "/etc/passwd"}, "policy": "blocked", "reason": "path outside allowed directories"}
+```
+
+### Config watch + alerting
+
+Continuously monitor MCP config files for changes. On change, re-scans and alerts if new risks are introduced:
+
+```bash
+# Watch with console alerts
+agent-bom watch
+
+# Watch with Slack webhook alerts
+agent-bom watch --webhook https://hooks.slack.com/services/T00/B00/xxx
+
+# Watch with JSONL log + policy
+agent-bom watch --log alerts.jsonl --policy policy.json
+```
+
+Alert sinks: console (Rich), webhook (Slack/Teams/PagerDuty), file (JSONL). Debounce interval configurable with `--interval`.
+
+### Auto-discovery for unknown packages
+
+Packages not in the bundled 109-server registry are automatically enriched from npm/PyPI APIs during scans. Each unknown package gets a heuristic risk profile based on:
+
+- **Capability signals** — filesystem, shell, execute, database keywords in description
+- **Trust signals** — maintainer count, source repository presence, download volume
+- **Dependency signals** — transitive dependency count as risk amplifier
+
+No configuration needed — runs automatically during `agent-bom scan`.
+
+### Remediation automation
+
+Generate executable fix commands and credential scope-reduction guides:
+
+```bash
+# Generate remediation.md with all fix commands
+agent-bom scan --remediate remediation.md
+
+# Generate remediation.sh script (executable)
+agent-bom scan --remediate-sh remediation.sh
+
+# Both
+agent-bom scan --remediate remediation.md --remediate-sh remediation.sh
+```
+
+Package upgrades per ecosystem (npm, pip, cargo, go, maven, nuget, rubygems) + credential-specific templates for GitHub PAT, Postgres, Slack, AWS/Azure/GCP with exact CLI commands and scope-reduction steps.
+
+### Deep risk analysis (tool capability taxonomy)
+
+Every MCP tool is classified into a semantic capability taxonomy:
+
+| Capability | Weight | Examples |
+|-----------|--------|---------|
+| READ | 1 | `read_file`, `search`, `query`, `list` |
+| WRITE | 3 | `write_file`, `create`, `update`, `send` |
+| DELETE | 4 | `delete`, `remove`, `drop`, `purge` |
+| EXECUTE | 5 | `run_command`, `shell`, `exec`, `eval` |
+| NETWORK | 2 | `fetch`, `http`, `download`, `scrape` |
+| AUTH | 4 | `login`, `token`, `credential`, `oauth` |
+| ADMIN | 5 | `config`, `permission`, `deploy`, `migrate` |
+
+**Dangerous combinations** are detected and flagged:
+- EXECUTE + WRITE → "Full system compromise possible"
+- NETWORK + READ → "Data exfiltration risk"
+- AUTH + NETWORK → "Credential theft risk"
+
+This replaces the shallow keyword matching in OWASP, ATLAS, and NIST taggers with semantic capability-aware classification.
 
 ### Threat framework coverage matrix
 
@@ -423,11 +531,13 @@ Unverified servers in your configs trigger a warning. Policy rules can block the
 |------|---------|----------|
 | Developer CLI | `agent-bom scan` | Local audit, pre-commit checks |
 | Pre-install check | `agent-bom check express@4.18.2 -e npm` | Before running any MCP server |
-| GitHub Action | `uses: agent-bom/agent-bom@v0.16.0` | CI/CD gate + Security tab |
+| GitHub Action | `uses: agent-bom/agent-bom@v0.17.0` | CI/CD gate + Security tab |
 | Docker | `docker run agentbom/agent-bom scan` | Isolated, reproducible scans |
 | REST API | `agent-bom api` | Dashboards, SIEM, scripting |
 | Dashboard | `agent-bom serve` | Team-visible security dashboard |
-| Prometheus | `--push-gateway` or `--otel-endpoint` | Continuous monitoring |
+| MCP Proxy | `agent-bom proxy -- CMD` | Runtime security + audit logging |
+| Config Watch | `agent-bom watch` | Continuous monitoring + alerting |
+| Prometheus | `--push-gateway` or `--otel-endpoint` | Metrics monitoring |
 | K8s CronJob | Helm chart + CronJob | Cluster-wide auditing |
 
 ---
@@ -438,7 +548,7 @@ Use agent-bom directly in your CI/CD pipeline:
 
 ```yaml
 - name: AI supply chain scan
-  uses: agent-bom/agent-bom@v0.16.0
+  uses: agent-bom/agent-bom@v0.17.0
   with:
     severity-threshold: high
     upload-sarif: true
@@ -447,7 +557,7 @@ Use agent-bom directly in your CI/CD pipeline:
 Full options:
 
 ```yaml
-- uses: agent-bom/agent-bom@v0.16.0
+- uses: agent-bom/agent-bom@v0.17.0
   with:
     severity-threshold: high        # fail on high+ CVEs
     policy: policy.json             # policy-as-code gates
@@ -612,6 +722,13 @@ These tools solve different problems and are **complementary**.
 - [x] Registry enrichment — 109 servers with risk justifications, drill-down detail pages, category filters
 - [x] Enterprise scan form — bulk Docker image input (paste, file upload) for fleet-scale scanning
 - [x] Collapsible UI — agents, blast radius, remediation, and inventory sections collapse/expand
+- [x] MCP runtime proxy — stdio proxy intercepting JSON-RPC, audit logging, policy enforcement, `--block-undeclared`
+- [x] Auto-discovery for unknown packages — npm/PyPI API metadata fetch + heuristic risk scoring
+- [x] Remediation automation — ecosystem-specific upgrade commands + credential scope-reduction templates, `--remediate` / `--remediate-sh`
+- [x] Config watch + alerting — continuous monitoring with console, webhook (Slack/Teams/PagerDuty), and file alert sinks
+- [x] Deep risk analysis — tool capability taxonomy (7 categories), dangerous combination detection, replaces keyword matching
+- [x] Per-finding framework tag IDs — blast radius table shows actual OWASP/ATLAS/NIST tag IDs per vulnerability
+- [x] Threat framework coverage badge — compact visual bars for OWASP/ATLAS/NIST hit rates in CLI footer
 - [ ] Jupyter notebook AI library scanning
 - [ ] ToolHive integration (`--toolhive` flag for managed server scanning)
 - [ ] License compliance engine (SPDX license detection + copyleft chain analysis)

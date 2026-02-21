@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-bom"
 version = "0.17.0"
-description = "AI Bill of Materials (AI-BOM) generator — CVE scanning, blast radius, enterprise remediation plans, OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF threat mapping, LLM-powered enrichment, OpenClaw discovery, MCP runtime introspection, and MCP registry for AI agents."
+description = "AI Bill of Materials (AI-BOM) generator — CVE scanning, blast radius, MCP runtime proxy, remediation automation, config watch + alerting, deep risk analysis, OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF threat mapping, LLM-powered enrichment, and 109-server MCP registry for AI agents."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "agent-bom", email = "security@agent-bom.dev"}
 ]
-keywords = ["ai-bom", "sbom", "mcp", "mcp-server", "security", "ai-agents", "vulnerability", "supply-chain", "owasp", "mitre-atlas", "nist-ai-rmf", "grype", "syft", "blast-radius", "cve", "llm-security", "remediation", "mcp-introspection", "openclaw", "ai-enrichment"]
+keywords = ["ai-bom", "sbom", "mcp", "mcp-server", "security", "ai-agents", "vulnerability", "supply-chain", "owasp", "mitre-atlas", "nist-ai-rmf", "grype", "syft", "blast-radius", "cve", "llm-security", "remediation", "mcp-introspection", "mcp-proxy", "runtime-security", "openclaw", "ai-enrichment"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
