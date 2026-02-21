@@ -358,6 +358,47 @@ async def get_scan(job_id: str) -> ScanJob:
     return _jobs[job_id]
 
 
+@app.get("/v1/scan/{job_id}/attack-flow", tags=["scan"])
+async def get_attack_flow(
+    job_id: str,
+    cve: str | None = None,
+    severity: str | None = None,
+    framework: str | None = None,
+    agent: str | None = None,
+) -> dict:
+    """Get the attack flow graph for a completed scan.
+
+    Returns React Flow-compatible nodes/edges showing the CVE -> package ->
+    server -> agent attack chain with credential and tool branches.
+
+    Query params for filtering:
+      ?cve=CVE-2025-xxx     - show only this CVE's blast radius
+      ?severity=critical     - filter by severity level
+      ?framework=LLM05       - filter by OWASP/ATLAS/NIST tag
+      ?agent=claude-desktop  - filter to a specific agent
+    """
+    if job_id not in _jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    job = _jobs[job_id]
+    if job.status != JobStatus.DONE or not job.result:
+        raise HTTPException(status_code=409, detail="Scan not completed yet")
+
+    from agent_bom.output.attack_flow import build_attack_flow
+
+    blast_radius = job.result.get("blast_radius", [])
+    agents_data = job.result.get("agents", [])
+
+    return build_attack_flow(
+        blast_radius,
+        agents_data,
+        cve=cve,
+        severity=severity,
+        framework=framework,
+        agent_name=agent,
+    )
+
+
 @app.delete("/v1/scan/{job_id}", status_code=204, tags=["scan"])
 async def delete_scan(job_id: str) -> None:
     """Discard a job record."""

@@ -4,7 +4,7 @@ import { use, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { api, ScanJob, ScanResult, BlastRadius, RemediationItem, formatDate, OWASP_LLM_TOP10, MITRE_ATLAS, severityColor } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Zap, Shield, Key, Wrench, ArrowUpCircle, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Zap, Shield, Key, Wrench, ArrowUpCircle, AlertTriangle, ChevronDown, ChevronRight, GitBranch } from "lucide-react";
 
 export default function ScanResultPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -118,20 +118,29 @@ export default function ScanResultPage({ params }: { params: Promise<{ id: strin
       {/* Blast radius */}
       {blastRadius.length > 0 && (
         <section>
-          <button
-            type="button"
-            onClick={() => toggleSection("blast")}
-            className="flex items-center gap-2 mb-3 group"
-          >
-            {collapsedSections.has("blast") ? (
-              <ChevronRight className="w-4 h-4 text-zinc-500" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-zinc-500" />
-            )}
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">
-              Blast Radius ({blastRadius.length})
-            </h2>
-          </button>
+          <div className="flex items-center justify-between mb-3">
+            <button
+              type="button"
+              onClick={() => toggleSection("blast")}
+              className="flex items-center gap-2 group"
+            >
+              {collapsedSections.has("blast") ? (
+                <ChevronRight className="w-4 h-4 text-zinc-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-zinc-500" />
+              )}
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors">
+                Blast Radius ({blastRadius.length})
+              </h2>
+            </button>
+            <Link
+              href={`/scan/${id}/attack-flow`}
+              className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-950/30 border border-emerald-900/50 rounded-lg px-3 py-1.5"
+            >
+              <GitBranch className="w-3 h-3" />
+              View Attack Flow
+            </Link>
+          </div>
           {!collapsedSections.has("blast") && (
             <div className="space-y-3">
               {blastRadius
