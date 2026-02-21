@@ -107,15 +107,74 @@ export interface Vulnerability {
 export interface BlastRadius {
   vulnerability_id: string;
   severity: string;
+  package?: string;
+  ecosystem?: string;
   affected_agents: string[];
+  affected_servers?: string[];
   exposed_credentials: string[];
   reachable_tools: string[];
   blast_score: number;
   cvss_score?: number;
   epss_score?: number;
+  is_kev?: boolean;
   cisa_kev?: boolean;
+  risk_score?: number;
+  fixed_version?: string;
   owasp_tags?: string[];
   atlas_tags?: string[];
+  nist_ai_rmf_tags?: string[];
+}
+
+// ─── Attack Flow Types ───────────────────────────────────────────────────────
+
+export interface AttackFlowNodeData {
+  nodeType: "cve" | "package" | "server" | "agent" | "credential" | "tool";
+  label: string;
+  severity?: string;
+  cvss_score?: number;
+  epss_score?: number;
+  is_kev?: boolean;
+  risk_score?: number;
+  fixed_version?: string;
+  owasp_tags?: string[];
+  atlas_tags?: string[];
+  nist_ai_rmf_tags?: string[];
+  version?: string;
+  ecosystem?: string;
+  agent_type?: string;
+  status?: string;
+}
+
+export interface AttackFlowNode {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: AttackFlowNodeData;
+}
+
+export interface AttackFlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  animated?: boolean;
+  style?: { stroke: string };
+}
+
+export interface AttackFlowStats {
+  total_cves: number;
+  total_packages: number;
+  total_servers: number;
+  total_agents: number;
+  total_credentials: number;
+  total_tools: number;
+  severity_counts: Record<string, number>;
+}
+
+export interface AttackFlowResponse {
+  nodes: AttackFlowNode[];
+  edges: AttackFlowEdge[];
+  stats: AttackFlowStats;
 }
 
 export interface Tool {
@@ -233,6 +292,20 @@ export const api = {
   /** MCP registry catalog */
   listRegistry: () => get<RegistryResponse>("/v1/registry"),
   getRegistryServer: (id: string) => get<RegistryServer>(`/v1/registry/${id}`),
+
+  /** Get attack flow graph for a completed scan */
+  getAttackFlow: (
+    jobId: string,
+    filters?: { cve?: string; severity?: string; framework?: string; agent?: string }
+  ) => {
+    const params = new URLSearchParams();
+    if (filters?.cve) params.set("cve", filters.cve);
+    if (filters?.severity) params.set("severity", filters.severity);
+    if (filters?.framework) params.set("framework", filters.framework);
+    if (filters?.agent) params.set("agent", filters.agent);
+    const qs = params.toString();
+    return get<AttackFlowResponse>(`/v1/scan/${jobId}/attack-flow${qs ? `?${qs}` : ""}`);
+  },
 
   /** Connect to SSE stream for real-time progress */
   streamScan: (jobId: string, onMessage: (data: unknown) => void, onDone: () => void) => {

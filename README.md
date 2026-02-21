@@ -363,6 +363,42 @@ Snowflake discovery covers the full Cortex AI stack:
 
 Cloud SDKs are optional extras — install only what you need. Authentication uses each provider's standard credential chain (env vars, config files, IAM roles).
 
+### Attack flow diagrams
+
+Drill into any CVE with an interactive per-CVE blast radius diagram — showing the exact attack chain from vulnerability through packages, MCP servers, agents, credentials, and tools:
+
+```bash
+# Via the REST API
+GET /v1/scan/{job_id}/attack-flow?cve=CVE-2024-1234&severity=critical
+```
+
+- **Interactive React Flow canvas** — zoom, pan, minimap, click-to-inspect detail panel
+- **Filter by CVE, severity, framework tag, or agent** — isolate specific attack chains
+- **Color-coded nodes** — red (CVE), gray (package), blue (server), green (agent), yellow (credential), purple (tool)
+- **Export** — download graph data as JSON for audit evidence
+- **Linked from scan results** — "View Attack Flow" button in every blast radius section
+
+### Skill file scanning
+
+Scan AI coding assistant instruction files (CLAUDE.md, .cursorrules, skill.md, AGENTS.md, etc.) for embedded MCP server references, package dependencies, and credential env vars:
+
+```bash
+# Explicit file
+agent-bom scan --skill CLAUDE.md --skill .cursorrules
+
+# Auto-discovery — scans all well-known skill files in the project
+agent-bom scan
+```
+
+Auto-discovers: `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.md`, `skill.md`, `skills/*.md`, `.github/copilot-instructions.md`, `.windsurfrules`, `AGENTS.md`
+
+Extracts:
+- `npx`/`bunx` package references → npm ecosystem
+- `uvx`/`uv run`/`uv tool run` package references → pypi ecosystem
+- `pip install` and `npm install` commands
+- MCP server JSON config blocks (`mcpServers`)
+- Credential env var names (API keys, tokens, secrets)
+
 ### Graph visualization
 
 Cloud and local agents are visualized as an interactive dependency graph in the HTML dashboard. Provider nodes connect to agents, which connect to servers and packages. CVE nodes are attached to vulnerable packages with severity coloring.
@@ -423,7 +459,7 @@ Unverified servers in your configs trigger a warning. Policy rules can block the
 |------|---------|----------|
 | Developer CLI | `agent-bom scan` | Local audit, pre-commit checks |
 | Pre-install check | `agent-bom check express@4.18.2 -e npm` | Before running any MCP server |
-| GitHub Action | `uses: agent-bom/agent-bom@v0.16.0` | CI/CD gate + Security tab |
+| GitHub Action | `uses: agent-bom/agent-bom@v0.18.0` | CI/CD gate + Security tab |
 | Docker | `docker run agentbom/agent-bom scan` | Isolated, reproducible scans |
 | REST API | `agent-bom api` | Dashboards, SIEM, scripting |
 | Dashboard | `agent-bom serve` | Team-visible security dashboard |
@@ -438,7 +474,7 @@ Use agent-bom directly in your CI/CD pipeline:
 
 ```yaml
 - name: AI supply chain scan
-  uses: agent-bom/agent-bom@v0.16.0
+  uses: agent-bom/agent-bom@v0.18.0
   with:
     severity-threshold: high
     upload-sarif: true
@@ -447,7 +483,7 @@ Use agent-bom directly in your CI/CD pipeline:
 Full options:
 
 ```yaml
-- uses: agent-bom/agent-bom@v0.16.0
+- uses: agent-bom/agent-bom@v0.18.0
   with:
     severity-threshold: high        # fail on high+ CVEs
     policy: policy.json             # policy-as-code gates
@@ -500,6 +536,7 @@ agent-bom api   # http://127.0.0.1:8422  →  /docs for Swagger UI
 | `POST /v1/scan` | Start async scan (returns `job_id`) |
 | `GET /v1/scan/{job_id}` | Poll status + results |
 | `GET /v1/scan/{job_id}/stream` | SSE real-time progress |
+| `GET /v1/scan/{job_id}/attack-flow` | Per-CVE attack flow graph (filterable) |
 | `GET /v1/registry` | Full MCP server registry (109 servers) |
 | `GET /v1/registry/{id}` | Single registry entry |
 
@@ -512,6 +549,7 @@ The Next.js dashboard (`ui/`) provides an enterprise-grade web interface on top 
 - **Security posture dashboard** — fleet-wide severity distribution, scan source breakdown, top vulnerable packages across all scans
 - **Vulnerability explorer** — group by severity, package, or agent with full-text search
 - **Scan detail** — per-job blast radius table, threat framework matrix, remediation plan with impact bars, collapsible sections
+- **Attack flow diagrams** — per-CVE interactive blast radius chain: CVE → Package → Server → Agent → Credentials/Tools, filterable by CVE, severity, framework tag, or agent, with exportable JSON for audit evidence
 - **Supply chain graph** — interactive React Flow visualization: Agent → MCP Server → Package → CVE with color-coded nodes, click-to-inspect detail panel, hover tooltips, zoom/pan, minimap, and job selector
 - **Registry browser** — searchable 109-server catalog with risk/category filters, drill-down detail pages (risk justification, tools, credentials, CVEs, versions), verified badges
 - **Agent discovery** — auto-discovered agents with stats bar (servers, packages, credentials, ecosystems), collapsible agent cards
@@ -612,6 +650,8 @@ These tools solve different problems and are **complementary**.
 - [x] Registry enrichment — 109 servers with risk justifications, drill-down detail pages, category filters
 - [x] Enterprise scan form — bulk Docker image input (paste, file upload) for fleet-scale scanning
 - [x] Collapsible UI — agents, blast radius, remediation, and inventory sections collapse/expand
+- [x] Attack flow diagrams — per-CVE interactive blast radius chain with filters and audit export
+- [x] Skill file scanning — CLAUDE.md, .cursorrules, AGENTS.md parsing for packages, MCP servers, credentials
 - [ ] Jupyter notebook AI library scanning
 - [ ] ToolHive integration (`--toolhive` flag for managed server scanning)
 - [ ] License compliance engine (SPDX license detection + copyleft chain analysis)

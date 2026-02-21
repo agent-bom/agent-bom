@@ -1,0 +1,150 @@
+"""Tests for attack flow graph builder."""
+
+from __future__ import annotations
+
+from agent_bom.output.attack_flow import build_attack_flow
+
+# ── Test data fixtures ──────────────────────────────────────────────────────
+
+
+def _make_blast_radius():
+    return [
+        {
+            "vulnerability_id": "CVE-2024-1234",
+            "severity": "critical",
+            "cvss_score": 9.8,
+            "epss_score": 0.72,
+            "is_kev": True,
+            "risk_score": 9.2,
+            "package": "express@4.18.2",
+            "ecosystem": "npm",
+            "affected_agents": ["claude-desktop"],
+            "affected_servers": ["filesystem"],
+            "exposed_credentials": ["DB_PASSWORD"],
+            "exposed_tools": ["read_file", "write_file"],
+            "fixed_version": "4.19.0",
+            "owasp_tags": ["LLM05", "LLM06"],
+            "atlas_tags": ["AML.T0010"],
+            "nist_ai_rmf_tags": ["MAP-3.5"],
+            "ai_risk_context": "MCP server with filesystem access",
+        },
+        {
+            "vulnerability_id": "CVE-2024-5678",
+            "severity": "high",
+            "cvss_score": 7.5,
+            "epss_score": 0.15,
+            "is_kev": False,
+            "risk_score": 6.8,
+            "package": "lodash@4.17.20",
+            "ecosystem": "npm",
+            "affected_agents": ["claude-desktop", "cursor"],
+            "affected_servers": ["github"],
+            "exposed_credentials": [],
+            "exposed_tools": ["create_issue"],
+            "fixed_version": "4.17.21",
+            "owasp_tags": ["LLM05"],
+            "atlas_tags": [],
+            "nist_ai_rmf_tags": [],
+            "ai_risk_context": None,
+        },
+    ]
+
+
+def _make_agents():
+    return [
+        {"name": "claude-desktop", "agent_type": "claude-desktop", "status": "configured"},
+        {"name": "cursor", "agent_type": "cursor", "status": "configured"},
+    ]
+
+
+# ── Node/edge generation tests ─────────────────────────────────────────────
+
+
+def test_build_attack_flow_basic():
+    """build_attack_flow returns nodes, edges, and stats."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents())
+    assert "nodes" in result
+    assert "edges" in result
+    assert "stats" in result
+    assert len(result["nodes"]) > 0
+    assert len(result["edges"]) > 0
+
+
+def test_attack_flow_node_types():
+    """All expected node types are present."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents())
+    node_types = {n["data"]["nodeType"] for n in result["nodes"]}
+    assert "cve" in node_types
+    assert "package" in node_types
+    assert "agent" in node_types
+
+
+def test_attack_flow_stats():
+    """Stats reflect the input data."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents())
+    stats = result["stats"]
+    assert stats["total_cves"] == 2
+    assert stats["total_packages"] == 2
+    assert stats["severity_counts"]["critical"] == 1
+    assert stats["severity_counts"]["high"] == 1
+
+
+# ── Filter tests ────────────────────────────────────────────────────────────
+
+
+def test_filter_by_cve():
+    """Filtering by CVE shows only that CVE's blast radius."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents(), cve="CVE-2024-1234")
+    cve_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "cve"]
+    assert len(cve_nodes) == 1
+    assert cve_nodes[0]["data"]["label"] == "CVE-2024-1234"
+
+
+def test_filter_by_severity():
+    """Filtering by severity returns only matching findings."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents(), severity="critical")
+    cve_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "cve"]
+    assert len(cve_nodes) == 1
+    assert all(n["data"]["severity"] == "critical" for n in cve_nodes)
+
+
+def test_filter_by_framework():
+    """Filtering by framework tag works."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents(), framework="AML.T0010")
+    cve_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "cve"]
+    assert len(cve_nodes) == 1
+    assert cve_nodes[0]["data"]["label"] == "CVE-2024-1234"
+
+
+def test_filter_by_agent():
+    """Filtering by agent name works."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents(), agent_name="cursor")
+    cve_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "cve"]
+    assert len(cve_nodes) == 1
+    assert cve_nodes[0]["data"]["label"] == "CVE-2024-5678"
+
+
+def test_empty_blast_radius():
+    """Empty blast radius returns empty graph."""
+    result = build_attack_flow([], [])
+    assert result["nodes"] == []
+    assert result["edges"] == []
+    assert result["stats"]["total_cves"] == 0
+
+
+def test_credential_nodes_present():
+    """Credential nodes are created for exposed credentials."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents())
+    cred_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "credential"]
+    assert len(cred_nodes) >= 1
+    assert any(n["data"]["label"] == "DB_PASSWORD" for n in cred_nodes)
+
+
+def test_tool_nodes_present():
+    """Tool nodes are created for exposed tools."""
+    result = build_attack_flow(_make_blast_radius(), _make_agents())
+    tool_nodes = [n for n in result["nodes"] if n["data"]["nodeType"] == "tool"]
+    assert len(tool_nodes) >= 1
+    labels = {n["data"]["label"] for n in tool_nodes}
+    assert "read_file" in labels
+    assert "write_file" in labels

@@ -137,6 +137,9 @@ def main():
 @click.option("--agent-project", "agent_projects", multiple=True, type=click.Path(exists=True), metavar="DIR",
               help="Python project using an agent framework (OpenAI Agents SDK, Google ADK, LangChain, AutoGen, "
                    "CrewAI, LlamaIndex, Pydantic AI, smolagents, Semantic Kernel, Haystack). Repeatable.")
+@click.option("--skill", "skill_paths", multiple=True, type=click.Path(exists=True), metavar="PATH",
+              help="Skill/instruction file to scan (CLAUDE.md, .cursorrules, skill.md). "
+                   "Extracts MCP server refs, packages, and credential env vars. Repeatable.")
 @click.option("--introspect", is_flag=True, help="Connect to live MCP servers to discover runtime tools/resources (read-only, requires mcp SDK)")
 @click.option("--introspect-timeout", type=float, default=10.0, show_default=True, help="Timeout per MCP server for --introspect (seconds)")
 @click.option("--verify-integrity", is_flag=True, help="Verify package integrity (SHA256/SRI) and SLSA provenance against registries")
@@ -208,6 +211,7 @@ def scan(
     tf_dirs: tuple,
     gha_path: Optional[str],
     agent_projects: tuple,
+    skill_paths: tuple,
     introspect: bool,
     introspect_timeout: float,
     verify_integrity: bool,
@@ -537,6 +541,51 @@ def scan(
                 agents.extend(ap_agents)
             else:
                 con.print("  [dim]  No agent framework usage detected[/dim]")
+
+    # Step 1g2: Skill file scanning (--skill + auto-discovery)
+    from agent_bom.parsers.skills import discover_skill_files, scan_skill_files
+    skill_file_list: list[Path] = []
+    for sp in skill_paths:
+        p = Path(sp)
+        if p.is_dir():
+            skill_file_list.extend(discover_skill_files(p))
+        else:
+            skill_file_list.append(p)
+    # Auto-discover skill files in project directory
+    search_dir = Path(project) if project else Path.cwd()
+    auto_skills = discover_skill_files(search_dir)
+    for sf in auto_skills:
+        if sf not in skill_file_list:
+            skill_file_list.append(sf)
+
+    if skill_file_list:
+        skill_result = scan_skill_files(skill_file_list)
+        if skill_result.servers or skill_result.packages or skill_result.credential_env_vars:
+            con.print(f"\n[bold blue]Scanning {len(skill_file_list)} skill file(s)...[/bold blue]\n")
+            if skill_result.servers:
+                from agent_bom.models import Agent, AgentType
+                skill_agent = Agent(
+                    name="skill-files",
+                    agent_type=AgentType.CUSTOM,
+                    config_path=str(skill_file_list[0]),
+                    mcp_servers=skill_result.servers,
+                )
+                agents.append(skill_agent)
+                con.print(f"  [green]✓[/green] Found {len(skill_result.servers)} MCP server(s) in skill files")
+            if skill_result.packages:
+                from agent_bom.models import Agent, AgentType
+                from agent_bom.models import MCPServer as _SkillSrv
+                skill_server = _SkillSrv(name="skill-packages", command="(from skill files)", packages=skill_result.packages)
+                skill_pkg_agent = Agent(
+                    name="skill-packages",
+                    agent_type=AgentType.CUSTOM,
+                    config_path=", ".join(str(p) for p in skill_file_list[:3]),
+                    mcp_servers=[skill_server],
+                )
+                agents.append(skill_pkg_agent)
+                con.print(f"  [green]✓[/green] Found {len(skill_result.packages)} package(s) referenced in skill files")
+            if skill_result.credential_env_vars:
+                con.print(f"  [yellow]⚠[/yellow] {len(skill_result.credential_env_vars)} credential env var(s) referenced in skill files")
 
     # Step 1h: Cloud provider discovery
     cloud_providers: list[tuple[str, dict]] = []

@@ -1,0 +1,168 @@
+"""Tests for skill/instruction file parser."""
+
+from __future__ import annotations
+
+from agent_bom.parsers.skills import (
+    discover_skill_files,
+    parse_skill_file,
+    scan_skill_files,
+)
+
+# ── parse_skill_file tests ──────────────────────────────────────────────────
+
+
+def test_parse_npx_commands(tmp_path):
+    """Extracts npx package references from code blocks."""
+    md = tmp_path / "skill.md"
+    md.write_text(
+        "# My Skill\n\n"
+        "```bash\n"
+        "npx -y @modelcontextprotocol/server-filesystem /tmp\n"
+        "npx @anthropic/mcp-server-github\n"
+        "```\n"
+    )
+    result = parse_skill_file(md)
+    names = [p.name for p in result.packages]
+    assert "@modelcontextprotocol/server-filesystem" in names
+    assert "@anthropic/mcp-server-github" in names
+    for pkg in result.packages:
+        assert pkg.ecosystem == "npm"
+
+
+def test_parse_uvx_commands(tmp_path):
+    """Extracts uvx package references."""
+    md = tmp_path / "skill.md"
+    md.write_text(
+        "# Python Skill\n\n"
+        "```bash\n"
+        "uvx mcp-server-sqlite --db test.db\n"
+        "```\n"
+    )
+    result = parse_skill_file(md)
+    assert len(result.packages) >= 1
+    assert result.packages[0].name == "mcp-server-sqlite"
+    assert result.packages[0].ecosystem == "pypi"
+
+
+def test_parse_pip_install(tmp_path):
+    """Extracts pip install package references."""
+    md = tmp_path / "setup.md"
+    md.write_text(
+        "# Setup\n\n"
+        "```bash\n"
+        "pip install langchain==0.1.0 openai>=1.0\n"
+        "```\n"
+    )
+    result = parse_skill_file(md)
+    names = [p.name for p in result.packages]
+    assert "langchain" in names
+    assert "openai" in names
+
+
+def test_parse_npm_install(tmp_path):
+    """Extracts npm install package references."""
+    md = tmp_path / "setup.md"
+    md.write_text(
+        "# Setup\n\n"
+        "```bash\n"
+        "npm install express@4.18.2 lodash\n"
+        "```\n"
+    )
+    result = parse_skill_file(md)
+    names = [p.name for p in result.packages]
+    assert "express" in names
+    assert "lodash" in names
+
+
+def test_parse_mcp_json_block(tmp_path):
+    """Extracts MCP server configs from JSON code blocks."""
+    md = tmp_path / "config.md"
+    md.write_text(
+        '# MCP Config\n\n'
+        '```json\n'
+        '{\n'
+        '  "mcpServers": {\n'
+        '    "filesystem": {\n'
+        '      "command": "npx",\n'
+        '      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],\n'
+        '      "env": {"API_KEY": "test"}\n'
+        '    }\n'
+        '  }\n'
+        '}\n'
+        '```\n'
+    )
+    result = parse_skill_file(md)
+    assert len(result.servers) >= 1
+    assert result.servers[0].name == "filesystem"
+
+
+def test_parse_credential_env_vars(tmp_path):
+    """Detects credential env var references, excludes false positives."""
+    md = tmp_path / "config.md"
+    md.write_text(
+        "# Config\n\n"
+        "Set OPENAI_API_KEY and ANTHROPIC_API_KEY in your environment.\n"
+        "Also set DATABASE_URL and PORT and HOME.\n"
+    )
+    result = parse_skill_file(md)
+    creds = result.credential_env_vars
+    assert "OPENAI_API_KEY" in creds
+    assert "ANTHROPIC_API_KEY" in creds
+    # False positives should be excluded
+    assert "PORT" not in creds
+    assert "HOME" not in creds
+
+
+def test_parse_empty_file(tmp_path):
+    """Empty file returns empty result."""
+    md = tmp_path / "empty.md"
+    md.write_text("")
+    result = parse_skill_file(md)
+    assert result.packages == []
+    assert result.servers == []
+    assert result.credential_env_vars == []
+
+
+# ── discover_skill_files tests ──────────────────────────────────────────────
+
+
+def test_discover_claude_md(tmp_path):
+    """Discovers CLAUDE.md in project directory."""
+    (tmp_path / "CLAUDE.md").write_text("# Claude instructions")
+    found = discover_skill_files(tmp_path)
+    assert any(p.name == "CLAUDE.md" for p in found)
+
+
+def test_discover_skills_directory(tmp_path):
+    """Discovers .md files inside skills/ directory."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    (skills_dir / "my-skill.md").write_text("# My Skill")
+    found = discover_skill_files(tmp_path)
+    assert any(p.name == "my-skill.md" for p in found)
+
+
+def test_discover_cursorrules(tmp_path):
+    """Discovers .cursorrules file."""
+    (tmp_path / ".cursorrules").write_text("# Cursor rules")
+    found = discover_skill_files(tmp_path)
+    assert any(p.name == ".cursorrules" for p in found)
+
+
+# ── scan_skill_files tests ──────────────────────────────────────────────────
+
+
+def test_scan_deduplicates(tmp_path):
+    """scan_skill_files merges and deduplicates across files."""
+    content = (
+        "```bash\n"
+        "npx @modelcontextprotocol/server-filesystem /tmp\n"
+        "```\n"
+    )
+    f1 = tmp_path / "skill1.md"
+    f2 = tmp_path / "skill2.md"
+    f1.write_text(content)
+    f2.write_text(content)
+    result = scan_skill_files([f1, f2])
+    names = [p.name for p in result.packages]
+    assert names.count("@modelcontextprotocol/server-filesystem") == 1
