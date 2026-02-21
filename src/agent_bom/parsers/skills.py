@@ -45,11 +45,11 @@ _UVX_RE = re.compile(
     r"(?:uvx|uv\s+(?:run|tool\s+run))\s+([\w][\w.-]*(?:==[\w.+-]+)?)",
 )
 _PIP_INSTALL_RE = re.compile(
-    r"pip\s+install\s+(?:-[^\s]+\s+)*(.+?)(?:\s*$|\s*&&|\s*\\)",
+    r"pip\s+install\s+(?:-[\w-]+\s+)*(.+?)(?:\s*$|\s*&&|\s*\\)",
     re.MULTILINE,
 )
 _NPM_INSTALL_RE = re.compile(
-    r"npm\s+install\s+(?:--save-dev\s+|--save\s+|-[^\s]+\s+)*(.+?)(?:\s*$|\s*&&|\s*\\)",
+    r"npm\s+install\s+(?:-[\w-]+\s+)*(.+?)(?:\s*$|\s*&&|\s*\\)",
     re.MULTILINE,
 )
 _ENV_VAR_RE = re.compile(r"\b([A-Z][A-Z0-9_]{2,})\b")
