@@ -306,7 +306,7 @@ def _check_server(
         url_lower = srv.url.lower()
         is_local = any(
             local in url_lower
-            for local in ("localhost", "127.0.0.1", "[::1]", "0.0.0.0")
+            for local in ("localhost", "127.0.0.1", "[::1]", "0.0.0.0")  # nosec B104 — checking URLs, not binding
         )
         if not is_local:
             audit.findings.append(SkillFinding(
