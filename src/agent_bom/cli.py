@@ -1049,22 +1049,35 @@ def validate(inventory_file: str):
 @main.command()
 def where():
     """Show where agent-bom looks for MCP configurations."""
+    import shutil
+
     console = Console()
     console.print(BANNER, style="bold blue")
     console.print("\n[bold]MCP Client Configuration Locations[/bold]\n")
 
-    from agent_bom.discovery import CONFIG_LOCATIONS, PROJECT_CONFIG_FILES, expand_path, get_platform
+    from agent_bom.discovery import AGENT_BINARIES, CONFIG_LOCATIONS, PROJECT_CONFIG_FILES, expand_path, get_platform
 
     current_platform = get_platform()
 
     for agent_type, platforms in CONFIG_LOCATIONS.items():
         paths = platforms.get(current_platform, [])
-        console.print(f"\n  [bold cyan]{agent_type.value}[/bold cyan]")
-        for p in paths:
-            expanded = expand_path(p)
-            exists = "✓" if expanded.exists() else "✗"
-            style = "green" if expanded.exists() else "dim"
-            console.print(f"    [{style}]{exists} {expanded}[/{style}]")
+        binary = AGENT_BINARIES.get(agent_type)
+        binary_status = ""
+        if binary:
+            if shutil.which(binary):
+                binary_status = f" [green](binary: {binary} found)[/green]"
+            else:
+                binary_status = f" [dim](binary: {binary} not found)[/dim]"
+
+        console.print(f"\n  [bold cyan]{agent_type.value}[/bold cyan]{binary_status}")
+        if paths:
+            for p in paths:
+                expanded = expand_path(p)
+                exists = "✓" if expanded.exists() else "✗"
+                style = "green" if expanded.exists() else "dim"
+                console.print(f"    [{style}]{exists} {expanded}[/{style}]")
+        else:
+            console.print(f"    [dim]  (CLI-based discovery via {binary or 'N/A'})[/dim]")
 
     console.print("\n  [bold cyan]Project-level configs[/bold cyan]")
     for config_name in PROJECT_CONFIG_FILES:

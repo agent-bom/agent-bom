@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
-from agent_bom.models import Agent, AIBOMReport, BlastRadius, Severity
+from agent_bom.models import Agent, AgentStatus, AIBOMReport, BlastRadius, Severity
 
 console = Console()
 
@@ -47,9 +47,12 @@ def print_agent_tree(report: AIBOMReport) -> None:
     console.print("\n[bold blue]📊 AI-BOM Dependency Tree[/bold blue]\n")
 
     for agent in report.agents:
+        status_str = ""
+        if agent.status == AgentStatus.INSTALLED_NOT_CONFIGURED:
+            status_str = " [yellow][installed, not configured][/yellow]"
         agent_tree = Tree(
             f"[bold]{agent.name}[/bold] ({agent.agent_type.value})"
-            f" - {agent.config_path}"
+            f"{status_str} - {agent.config_path}"
         )
 
         for server in agent.mcp_servers:
@@ -614,6 +617,7 @@ def to_json(report: AIBOMReport) -> dict:
                 "type": agent.agent_type.value,
                 "config_path": agent.config_path,
                 "source": agent.source,
+                "status": agent.status.value,
                 "mcp_servers": [
                     {
                         "name": server.name,
@@ -733,6 +737,7 @@ def to_cyclonedx(report: AIBOMReport) -> dict:
             "properties": [
                 {"name": "agent-bom:type", "value": "ai-agent"},
                 {"name": "agent-bom:config-path", "value": agent.config_path},
+                {"name": "agent-bom:status", "value": agent.status.value},
             ],
         })
 
@@ -1159,7 +1164,7 @@ def to_spdx(report: AIBOMReport) -> dict:
             "description": f"AI Agent ({agent.agent_type.value})",
         }
         if agent.config_path:
-            agent_element["comment"] = f"config_path: {agent.config_path}"
+            agent_element["comment"] = f"config_path: {agent.config_path}, status: {agent.status.value}"
         if agent.source:
             agent_element["originatedBy"] = agent.source
         elements.append(agent_element)

@@ -6,12 +6,14 @@ import json
 import logging
 import os
 import platform
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
 
-from agent_bom.models import Agent, AgentType, MCPServer, TransportType
+from agent_bom.models import Agent, AgentStatus, AgentType, MCPServer, TransportType
 from agent_bom.security import (
     SecurityError,
     sanitize_env_vars,
@@ -89,6 +91,22 @@ CONFIG_LOCATIONS: dict[AgentType, dict[str, list[str]]] = {
         "Linux": ["~/.openclaw/openclaw.json"],
         "Windows": ["~/.openclaw/openclaw.json"],
     },
+    AgentType.TOOLHIVE: {
+        # ToolHive MCP server manager — discovery via `thv list`, not config files
+        "Darwin": [],
+        "Linux": [],
+        "Windows": [],
+    },
+}
+
+# Map agent types to their CLI binary names for installed-but-not-configured detection
+AGENT_BINARIES: dict[AgentType, str] = {
+    AgentType.CLAUDE_CODE: "claude",
+    AgentType.OPENCLAW: "openclaw",
+    AgentType.TOOLHIVE: "thv",
+    AgentType.ZED: "zed",
+    AgentType.CURSOR: "cursor",
+    AgentType.WINDSURF: "windsurf",
 }
 
 # Project-level config files to search for
@@ -194,6 +212,138 @@ def parse_mcp_config(config_data: dict, config_path: str) -> list[MCPServer]:
     return servers
 
 
+def parse_claude_json_projects(config_data: dict, config_path: str) -> list[MCPServer]:
+    """Parse Claude Code project-level MCP servers from ~/.claude.json.
+
+    ``claude mcp add`` stores servers under projects.<path>.mcpServers.
+    This iterates all project entries and collects their MCP servers.
+    """
+    servers: list[MCPServer] = []
+    projects = config_data.get("projects", {})
+    for project_path, project_data in projects.items():
+        if not isinstance(project_data, dict):
+            continue
+        mcp_servers = project_data.get("mcpServers", {})
+        if mcp_servers and isinstance(mcp_servers, dict):
+            project_servers = parse_mcp_config(
+                {"mcpServers": mcp_servers}, config_path
+            )
+            for s in project_servers:
+                s.working_dir = project_path
+            servers.extend(project_servers)
+    return servers
+
+
+def _parse_toolhive_servers(data) -> list[MCPServer]:
+    """Parse ToolHive ``thv list --output json`` into MCPServer objects."""
+    servers: list[MCPServer] = []
+    items = data if isinstance(data, list) else data.get("servers", [])
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", "")
+        if not name:
+            continue
+
+        url = item.get("url") or item.get("endpoint")
+        transport = TransportType.STDIO
+        if url:
+            transport = TransportType.SSE if "sse" in url.lower() else TransportType.STREAMABLE_HTTP
+
+        server = MCPServer(
+            name=name,
+            command=item.get("image", "thv"),
+            args=[],
+            transport=transport,
+            url=url,
+            config_path="thv",
+        )
+        servers.append(server)
+    return servers
+
+
+def discover_toolhive() -> Optional[Agent]:
+    """Discover MCP servers managed by ToolHive via ``thv list``.
+
+    Returns an Agent with CONFIGURED status if servers are found,
+    INSTALLED_NOT_CONFIGURED if thv is on PATH but no servers,
+    or None if thv is not installed.
+    """
+    if not shutil.which("thv"):
+        return None
+
+    try:
+        result = subprocess.run(
+            ["thv", "list", "--output", "json"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return Agent(
+            name="toolhive",
+            agent_type=AgentType.TOOLHIVE,
+            config_path="thv (binary on PATH)",
+            status=AgentStatus.INSTALLED_NOT_CONFIGURED,
+        )
+
+    if result.returncode != 0:
+        return Agent(
+            name="toolhive",
+            agent_type=AgentType.TOOLHIVE,
+            config_path="thv (binary on PATH)",
+            status=AgentStatus.INSTALLED_NOT_CONFIGURED,
+        )
+
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return Agent(
+            name="toolhive",
+            agent_type=AgentType.TOOLHIVE,
+            config_path="thv (binary on PATH)",
+            status=AgentStatus.INSTALLED_NOT_CONFIGURED,
+        )
+
+    servers = _parse_toolhive_servers(data)
+    if not servers:
+        return Agent(
+            name="toolhive",
+            agent_type=AgentType.TOOLHIVE,
+            config_path="thv (binary on PATH)",
+            status=AgentStatus.INSTALLED_NOT_CONFIGURED,
+        )
+
+    return Agent(
+        name="toolhive",
+        agent_type=AgentType.TOOLHIVE,
+        config_path="thv",
+        mcp_servers=servers,
+        status=AgentStatus.CONFIGURED,
+    )
+
+
+def detect_installed_agents(discovered_types: set[AgentType]) -> list[Agent]:
+    """Detect agent CLIs on PATH that weren't found via config files.
+
+    Returns agents with status=INSTALLED_NOT_CONFIGURED for visibility.
+    """
+    installed: list[Agent] = []
+    for agent_type, binary_name in AGENT_BINARIES.items():
+        if agent_type in discovered_types:
+            continue
+        if agent_type == AgentType.TOOLHIVE:
+            continue  # Handled by discover_toolhive()
+        if shutil.which(binary_name):
+            installed.append(Agent(
+                name=agent_type.value,
+                agent_type=agent_type,
+                config_path=f"{binary_name} (binary on PATH)",
+                status=AgentStatus.INSTALLED_NOT_CONFIGURED,
+            ))
+    return installed
+
+
 def discover_global_configs(agent_types: Optional[list[AgentType]] = None) -> list[Agent]:
     """Discover all global MCP client configurations."""
     agents = []
@@ -212,6 +362,10 @@ def discover_global_configs(agent_types: Optional[list[AgentType]] = None) -> li
                 try:
                     config_data = json.loads(config_path.read_text())
                     servers = parse_mcp_config(config_data, str(config_path))
+
+                    # Claude Code ~/.claude.json has project-level MCP servers
+                    if agent_type == AgentType.CLAUDE_CODE and config_path.name == ".claude.json":
+                        servers = servers + parse_claude_json_projects(config_data, str(config_path))
 
                     if servers:
                         agent = Agent(
@@ -266,7 +420,7 @@ def discover_project_configs(project_dir: Optional[str] = None) -> list[Agent]:
 
 
 def discover_all(project_dir: Optional[str] = None) -> list[Agent]:
-    """Run full discovery: global configs + project configs."""
+    """Run full discovery: global configs + project configs + CLI agents."""
     console.print("\n[bold blue]🔍 Discovering MCP configurations...[/bold blue]\n")
 
     agents = discover_global_configs()
@@ -276,12 +430,42 @@ def discover_all(project_dir: Optional[str] = None) -> list[Agent]:
     else:
         agents.extend(discover_project_configs())
 
-    if not agents:
+    # ToolHive CLI-based discovery
+    thv_agent = discover_toolhive()
+    if thv_agent:
+        if thv_agent.mcp_servers:
+            console.print(
+                f"  [green]✓[/green] Found toolhive with "
+                f"{len(thv_agent.mcp_servers)} MCP server(s) (via thv list)"
+            )
+        else:
+            console.print(
+                "  [dim]  toolhive: installed but not configured[/dim]"
+            )
+        agents.append(thv_agent)
+
+    # Detect installed-but-not-configured agents
+    discovered_types = {a.agent_type for a in agents}
+    installed_agents = detect_installed_agents(discovered_types)
+    for ia in installed_agents:
+        console.print(
+            f"  [dim]  {ia.name}: installed but not configured[/dim]"
+        )
+    agents.extend(installed_agents)
+
+    configured = [a for a in agents if a.status == AgentStatus.CONFIGURED]
+    if not configured and not installed_agents:
         console.print("  [yellow]No MCP configurations found.[/yellow]")
     else:
-        total_servers = sum(len(a.mcp_servers) for a in agents)
+        total_servers = sum(len(a.mcp_servers) for a in configured)
         console.print(
-            f"\n  [bold]Found {len(agents)} agent(s) with {total_servers} MCP server(s) total.[/bold]"
+            f"\n  [bold]Found {len(configured)} configured agent(s) with "
+            f"{total_servers} MCP server(s) total.[/bold]"
         )
+        if installed_agents:
+            console.print(
+                f"  [dim]{len(installed_agents)} additional agent(s) installed "
+                f"but not configured.[/dim]"
+            )
 
     return agents

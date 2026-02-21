@@ -27,6 +27,7 @@ class AgentType(str, Enum):
     CONTINUE = "continue"             # Continue.dev
     ZED = "zed"                       # Zed editor
     OPENCLAW = "openclaw"             # OpenClaw AI agent
+    TOOLHIVE = "toolhive"            # ToolHive MCP server manager
     CUSTOM = "custom"
 
 
@@ -35,6 +36,11 @@ class TransportType(str, Enum):
     SSE = "sse"
     STREAMABLE_HTTP = "streamable-http"
     UNKNOWN = "unknown"
+
+
+class AgentStatus(str, Enum):
+    CONFIGURED = "configured"
+    INSTALLED_NOT_CONFIGURED = "installed-not-configured"
 
 
 @dataclass
@@ -194,6 +200,7 @@ class Agent:
     mcp_servers: list[MCPServer] = field(default_factory=list)
     version: Optional[str] = None
     source: Optional[str] = None  # Inventory source (e.g. "snowflake", "aws", "local")
+    status: AgentStatus = AgentStatus.CONFIGURED
 
     @property
     def total_packages(self) -> int:
