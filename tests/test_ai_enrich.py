@@ -838,7 +838,7 @@ def test_check_huggingface_not_installed():
         # The function does its own import, so we need to patch at module level
         with patch.dict("sys.modules", {"huggingface_hub": None}):
             # Force reimport failure
-            result = _check_huggingface()
+            _check_huggingface()
             # Can't reliably test import failure this way; test the function directly
     # Just verify the function exists and returns bool
     assert isinstance(_check_huggingface(), bool)
