@@ -86,7 +86,7 @@
   <g transform="translate(264, 234)">
     <circle cx="6" cy="6" r="3.5" fill="#d97706" opacity="0.5"/>
     <text x="16" y="10" class="item-label">MCP Registry</text>
-    <text x="16" y="22" class="item-sub">100+ server provenance checks</text>
+    <text x="16" y="22" class="item-sub">112+ server provenance checks</text>
   </g>
 
   <!-- Arrow 2 -->
