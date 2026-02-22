@@ -711,6 +711,26 @@ def to_html(report: "AIBOMReport", blast_radii: list["BlastRadius"] | None = Non
     .legend i{{display:inline-block;width:10px;height:10px;border-radius:3px}}
     .legend i.diamond{{transform:rotate(45deg);border-radius:1px}}
 
+    /* NODE DETAIL SIDEBAR */
+    .node-sidebar{{position:fixed;top:56px;right:0;bottom:0;width:340px;background:rgba(15,23,42,.97);border-left:1px solid #334155;backdrop-filter:blur(12px);z-index:200;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;padding:0}}
+    .node-sidebar.open{{transform:translateX(0);display:block}}
+    .sidebar-header{{display:flex;justify-content:space-between;align-items:center;padding:16px 20px 8px;border-bottom:1px solid #1e293b}}
+    .sidebar-type{{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:#64748b;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid #334155}}
+    .sidebar-close{{background:none;border:none;color:#64748b;font-size:1.4rem;cursor:pointer;padding:4px 8px;border-radius:4px;transition:all .15s}}
+    .sidebar-close:hover{{color:#e2e8f0;background:#1e293b}}
+    .sidebar-name{{font-size:1rem;font-weight:700;color:#f1f5f9;padding:12px 20px 4px;margin:0}}
+    .sidebar-meta{{font-size:.78rem;color:#94a3b8;padding:0 20px 12px;font-family:monospace;white-space:pre-line}}
+    .sidebar-section{{padding:0 20px 16px}}
+    .sidebar-section:empty{{display:none}}
+    .sidebar-label{{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:8px}}
+    .sidebar-list{{list-style:none;padding:0;margin:0}}
+    .sidebar-list li{{font-size:.8rem;color:#cbd5e1;padding:5px 0;border-bottom:1px solid #0f172a}}
+    .sidebar-list li:last-child{{border-bottom:none}}
+    .sidebar-link{{color:#60a5fa;font-size:.78rem;text-decoration:none}}
+    .sidebar-link:hover{{text-decoration:underline;color:#93c5fd}}
+    .sidebar-cred{{color:#fbbf24;font-family:monospace;font-size:.78rem}}
+    @media(max-width:900px){{.node-sidebar{{width:100%}}}}
+
     /* TOOLTIP */
     #tip{{position:fixed;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;font-size:.76rem;color:#e2e8f0;pointer-events:none;white-space:pre-line;max-width:280px;z-index:9999;display:none;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.4)}}
 
@@ -776,7 +796,7 @@ def to_html(report: "AIBOMReport", blast_radii: list["BlastRadius"] | None = Non
     /* PRINT */
     @media print{{
       body{{background:#fff;color:#1e293b;font-size:12px}}
-      nav,.graph-controls,.graph-filter-bar,.vuln-filter-bar,.toggle-btn,.inv-search,.print-btn{{display:none}}
+      nav,.graph-controls,.graph-filter-bar,.vuln-filter-bar,.toggle-btn,.inv-search,.print-btn,.node-sidebar{{display:none!important}}
       .container{{max-width:100%;padding:10px}}
       section{{page-break-inside:avoid;margin-bottom:20px}}
       .panel,.stat-card,.agent-card,.server-card,.chart-panel{{background:#f8fafc;border:1px solid #e2e8f0;box-shadow:none}}
@@ -809,6 +829,19 @@ def to_html(report: "AIBOMReport", blast_radii: list["BlastRadius"] | None = Non
 </nav>
 
 <div id="tip"></div>
+
+<div id="nodeDetailSidebar" class="node-sidebar" style="display:none">
+  <div class="sidebar-header">
+    <span id="sidebarNodeType" class="sidebar-type"></span>
+    <button id="sidebarClose" class="sidebar-close">&times;</button>
+  </div>
+  <h3 id="sidebarNodeName" class="sidebar-name"></h3>
+  <div id="sidebarMeta" class="sidebar-meta"></div>
+  <div id="sidebarConnected" class="sidebar-section"></div>
+  <div id="sidebarCredentials" class="sidebar-section"></div>
+  <div id="sidebarCves" class="sidebar-section"></div>
+  <div id="sidebarRemediation" class="sidebar-section"></div>
+</div>
 
 <div class="container">
 
@@ -1247,16 +1280,138 @@ def to_html(report: "AIBOMReport", blast_radii: list["BlastRadius"] | None = Non
     }});
     cy.on('mouseout', 'node', function() {{ tip.style.display = 'none'; }});
 
-    // Click to highlight
+    // Click to highlight + sidebar
+    var sidebar = document.getElementById('nodeDetailSidebar');
+    var sidebarCloseBtn = document.getElementById('sidebarClose');
+
+    function showSidebar(node) {{
+      var d = node.data();
+      var t = d.type || '';
+      var typeLabels = {{'provider':'Provider','agent':'Agent','server_clean':'MCP Server','server_cred':'MCP Server','server_vuln':'MCP Server','pkg_vuln':'Package'}};
+      var typeLabel = typeLabels[t] || (t.indexOf('cve_')===0 ? 'Vulnerability' : t);
+      var typeColors = {{'provider':'#818cf8','agent':'#3b82f6','server_clean':'#10b981','server_cred':'#f59e0b','server_vuln':'#ef4444','pkg_vuln':'#dc2626'}};
+      var badgeColor = typeColors[t] || (t.indexOf('cve_')===0 ? '#f87171' : '#64748b');
+
+      document.getElementById('sidebarNodeType').textContent = typeLabel;
+      document.getElementById('sidebarNodeType').style.borderColor = badgeColor;
+      document.getElementById('sidebarNodeType').style.color = badgeColor;
+      document.getElementById('sidebarNodeName').textContent = d.label || d.id;
+
+      ['sidebarMeta','sidebarConnected','sidebarCredentials','sidebarCves','sidebarRemediation'].forEach(function(id) {{
+        document.getElementById(id).innerHTML = '';
+      }});
+
+      // Connected nodes
+      var neighbors = node.neighborhood('node');
+      if (neighbors.length > 0) {{
+        var h = '<div class="sidebar-label">Connected (' + neighbors.length + ')</div><ul class="sidebar-list">';
+        neighbors.forEach(function(n) {{
+          var nt = n.data('type') || '';
+          var icon = nt === 'agent' ? '&#x1f916;' : nt.indexOf('server')===0 ? '&#x2699;' : nt === 'pkg_vuln' ? '&#x1f4e6;' : nt.indexOf('cve_')===0 ? '&#x1f41b;' : '&#x25cf;';
+          h += '<li>' + icon + ' ' + (n.data('label') || n.data('id')).replace('\\n',' ') + '</li>';
+        }});
+        h += '</ul>';
+        document.getElementById('sidebarConnected').innerHTML = h;
+      }}
+
+      // Agent
+      if (t === 'agent') {{
+        var meta = '';
+        if (d.agentType) meta += 'Type: ' + d.agentType + '\\n';
+        if (d.source) meta += 'Source: ' + d.source + '\\n';
+        if (d.configPath) meta += 'Config: ' + d.configPath;
+        document.getElementById('sidebarMeta').textContent = meta;
+        var s = '<div class="sidebar-label">Statistics</div><ul class="sidebar-list">';
+        s += '<li>Servers: ' + (d.serverCount || 0) + '</li>';
+        s += '<li>Packages: ' + (d.packageCount || 0) + '</li>';
+        if (d.vulnCount) s += '<li style="color:#f87171">Vulnerabilities: ' + d.vulnCount + '</li>';
+        s += '</ul>';
+        document.getElementById('sidebarRemediation').innerHTML = s;
+      }}
+
+      // Server
+      if (t.indexOf('server_')===0) {{
+        if (d.command) document.getElementById('sidebarMeta').textContent = d.command;
+        var creds = []; try {{ creds = JSON.parse(d.credentials || '[]'); }} catch(e) {{}}
+        if (creds.length > 0) {{
+          var ch = '<div class="sidebar-label">Credentials (' + creds.length + ')</div><ul class="sidebar-list">';
+          creds.forEach(function(c) {{ ch += '<li>&#x1f511; <span class="sidebar-cred">' + c + '</span></li>'; }});
+          ch += '</ul>';
+          document.getElementById('sidebarCredentials').innerHTML = ch;
+        }}
+        var tools = []; try {{ tools = JSON.parse(d.toolNames || '[]'); }} catch(e) {{}}
+        if (tools.length > 0) {{
+          var th = '<div class="sidebar-label">MCP Tools (' + tools.length + ')</div><ul class="sidebar-list">';
+          tools.forEach(function(tl) {{ th += '<li>&#x1f527; ' + tl + '</li>'; }});
+          th += '</ul>';
+          document.getElementById('sidebarRemediation').innerHTML = th;
+        }}
+        var ph = '<div class="sidebar-label">Packages</div><ul class="sidebar-list">';
+        ph += '<li>Total: ' + (d.packageCount || 0) + '</li>';
+        if (d.vulnCount) ph += '<li style="color:#f87171">Vulnerable: ' + d.vulnCount + '</li>';
+        ph += '</ul>';
+        document.getElementById('sidebarCves').innerHTML = ph;
+      }}
+
+      // Package
+      if (t === 'pkg_vuln') {{
+        document.getElementById('sidebarMeta').textContent = (d.ecosystem || '') + ' \\u00b7 ' + (d.version || '');
+        var vids = []; try {{ vids = JSON.parse(d.vulnIds || '[]'); }} catch(e) {{}}
+        if (vids.length > 0) {{
+          var vh = '<div class="sidebar-label">CVEs (' + vids.length + ')</div><ul class="sidebar-list">';
+          vids.forEach(function(vid) {{
+            vh += '<li><a class="sidebar-link" href="https://osv.dev/vulnerability/' + vid + '" target="_blank" rel="noopener noreferrer">' + vid + ' &#x2197;</a></li>';
+          }});
+          vh += '</ul>';
+          document.getElementById('sidebarCves').innerHTML = vh;
+        }}
+      }}
+
+      // CVE
+      if (t.indexOf('cve_')===0) {{
+        var sev = t.replace('cve_', '');
+        var mp = [];
+        if (sev) mp.push('Severity: ' + sev.toUpperCase());
+        if (d.cvssScore) mp.push('CVSS: ' + d.cvssScore);
+        document.getElementById('sidebarMeta').textContent = mp.join(' \\u00b7 ');
+        if (d.summary) {{
+          document.getElementById('sidebarCredentials').innerHTML = '<div class="sidebar-label">Summary</div><p style="font-size:.8rem;color:#cbd5e1;margin:0">' + d.summary + '</p>';
+        }}
+        var rh = '<div class="sidebar-label">Remediation</div><ul class="sidebar-list">';
+        if (d.fixVersion) {{
+          rh += '<li style="color:#4ade80">&#x2705; Fix: upgrade to <code>' + d.fixVersion + '</code></li>';
+        }} else {{
+          rh += '<li style="color:#f59e0b">&#x26a0; No fix available</li>';
+        }}
+        var lbl = d.label || '';
+        rh += '<li><a class="sidebar-link" href="https://osv.dev/vulnerability/' + lbl + '" target="_blank" rel="noopener noreferrer">View on OSV &#x2197;</a></li>';
+        rh += '<li><a class="sidebar-link" href="https://nvd.nist.gov/vuln/detail/' + lbl + '" target="_blank" rel="noopener noreferrer">View on NVD &#x2197;</a></li>';
+        rh += '</ul>';
+        document.getElementById('sidebarRemediation').innerHTML = rh;
+      }}
+
+      sidebar.classList.add('open');
+      sidebar.style.display = 'block';
+    }}
+
+    function closeSidebar() {{
+      sidebar.classList.remove('open');
+      setTimeout(function() {{ sidebar.style.display = 'none'; }}, 250);
+    }}
+
+    sidebarCloseBtn.addEventListener('click', closeSidebar);
+
     cy.on('tap', 'node', function(e) {{
       cy.elements().removeClass('faded highlighted');
       var hood = e.target.closedNeighborhood();
       cy.elements().not(hood).addClass('faded');
       e.target.addClass('highlighted');
+      showSidebar(e.target);
     }});
     cy.on('tap', function(e) {{
       if (e.target === cy) {{
         cy.elements().removeClass('faded highlighted');
+        closeSidebar();
       }}
     }});
 
