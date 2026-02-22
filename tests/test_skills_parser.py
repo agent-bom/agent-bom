@@ -149,6 +149,22 @@ def test_discover_cursorrules(tmp_path):
     assert any(p.name == ".cursorrules" for p in found)
 
 
+def test_discover_skills_md_standalone(tmp_path):
+    """Discovers skills.md as a standalone file (Snowflake Cortex Code pattern)."""
+    (tmp_path / "skills.md").write_text("# Cortex Code skills")
+    found = discover_skill_files(tmp_path)
+    assert any(p.name == "skills.md" for p in found)
+
+
+def test_discover_cortex_skills(tmp_path):
+    """Discovers .cortex/skills.md (Snowflake Cortex Code)."""
+    cortex_dir = tmp_path / ".cortex"
+    cortex_dir.mkdir()
+    (cortex_dir / "skills.md").write_text("# Cortex skills config")
+    found = discover_skill_files(tmp_path)
+    assert any("skills.md" in str(p) and ".cortex" in str(p) for p in found)
+
+
 # ── scan_skill_files tests ──────────────────────────────────────────────────
 
 

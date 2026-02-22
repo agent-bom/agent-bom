@@ -1,8 +1,8 @@
 """Parse skill/instruction markdown files for MCP server references, packages, and credentials.
 
-Supported files: CLAUDE.md, .cursorrules, skill.md, skills/*.md,
-.github/copilot-instructions.md, .windsurfrules, AGENTS.md, and any .md
-file passed via --skill.
+Supported files: CLAUDE.md, .cursorrules, skill.md, skills.md, skills/*.md,
+.github/copilot-instructions.md, .windsurfrules, AGENTS.md, .cortex/skills.md,
+and any .md file passed via --skill.
 
 Extracts:
   1. Code blocks with npx/uvx/pip/npm commands → Package objects
@@ -30,10 +30,12 @@ SKILL_FILE_NAMES: list[str] = [
     ".cursorrules",
     ".cursor/rules",
     "skill.md",
+    "skills.md",
     "skills",
     ".github/copilot-instructions.md",
     ".windsurfrules",
     "AGENTS.md",
+    ".cortex/skills.md",
 ]
 
 # ─── Regex patterns ──────────────────────────────────────────────────────────
@@ -256,7 +258,7 @@ def _is_credential_name(name: str) -> bool:
 def discover_skill_files(project_dir: Path) -> list[Path]:
     """Auto-discover common skill/instruction files in a project directory.
 
-    Searches for CLAUDE.md, .cursorrules, skill.md, skills/*.md, etc.
+    Searches for CLAUDE.md, .cursorrules, skill.md, skills.md, skills/*.md, .cortex/skills.md, etc.
     """
     found: list[Path] = []
 

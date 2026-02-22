@@ -398,7 +398,7 @@ agent-bom scan --no-skill
 agent-bom scan --skill-only
 ```
 
-Auto-discovers: `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.md`, `skill.md`, `skills/*.md`, `.github/copilot-instructions.md`, `.windsurfrules`, `AGENTS.md`
+Auto-discovers: `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.md`, `skill.md`, `skills.md`, `skills/*.md`, `.github/copilot-instructions.md`, `.windsurfrules`, `AGENTS.md`, `.cortex/skills.md`
 
 Extracts:
 - `npx`/`bunx` package references → npm ecosystem
