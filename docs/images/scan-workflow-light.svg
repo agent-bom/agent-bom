@@ -162,7 +162,7 @@
 
   <rect x="608" y="450" width="130" height="36" rx="6" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
   <text x="673" y="466" text-anchor="middle" class="label" fill="#6d28d9">MCP Registry</text>
-  <text x="673" y="480" text-anchor="middle" class="sub">55+ servers</text>
+  <text x="673" y="480" text-anchor="middle" class="sub">112+ servers</text>
 
   <rect x="752" y="450" width="120" height="36" rx="6" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
   <text x="812" y="466" text-anchor="middle" class="label" fill="#6d28d9">Grype DB</text>
