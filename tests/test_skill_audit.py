@@ -665,10 +665,9 @@ def test_behavioral_no_false_positive_sudo_in_prose():
     """The word 'sudo' alone without a command should not trigger."""
     result = _make_behavioral_result("Do not use sudo in production environments.")
     audit = audit_skill_result(result)
-    findings = [f for f in audit.findings if f.category == "privilege_escalation"]
     # "sudo in" → matches \b sudo \s+ \S → "sudo i" — but "sudo" alone won't
     # Actually "sudo in" will match because \S matches "i". Let's test a cleaner case.
-    assert True  # This is a documentation test — see test below
+    assert audit is not None  # This is a documentation test — see test below
 
 
 def test_behavioral_no_false_positive_sudo_period():
@@ -683,14 +682,12 @@ def test_behavioral_git_push_dry_run_not_flagged():
     """git push --dry-run should NOT trigger repository_modification."""
     result = _make_behavioral_result("Test with git push --dry-run origin main")
     audit = audit_skill_result(result)
-    findings = [f for f in audit.findings if f.category == "repository_modification"]
+    repo_findings = [f for f in audit.findings if f.category == "repository_modification"]
     # The negative lookahead prevents matching git push followed by --dry-run
     # Note: git commit will still match since it's a separate pattern
-    commit_findings = [f for f in findings if "commit" in f.detail.lower()]
-    push_findings = [f for f in findings if "push" in f.detail.lower() and "dry-run" not in f.detail.lower()]
-    # The key assertion: the match should not be a false positive for push --dry-run
-    # But git commit in the same text would still match
-    assert True  # Pattern design test
+    push_only = [f for f in repo_findings if "push" in f.detail.lower() and "dry-run" not in f.detail.lower()]
+    # The key assertion: no false positive for push --dry-run
+    assert len(push_only) == 0
 
 
 def test_behavioral_rm_single_file_not_flagged():

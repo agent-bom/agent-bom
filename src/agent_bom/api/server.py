@@ -622,7 +622,6 @@ async def stream_scan(job_id: str):
     import json as _json
 
     async def event_generator():
-        job = _jobs[job_id]
         sent = 0
         while True:
             current = _jobs.get(job_id)
