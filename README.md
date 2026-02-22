@@ -36,28 +36,41 @@
 
 ## Why agent-bom?
 
+> **Grype tells you a package has a CVE.**
+> **agent-bom tells you which AI agents are compromised, which credentials leak, which tools an attacker reaches, and what the business impact is.**
+
+Traditional scanners stop at the package boundary. agent-bom maps the full blast radius through your AI infrastructure:
+
+```
+CVE-2025-1234  (CRITICAL · CVSS 9.8 · CISA KEV)
+  └─ better-sqlite3@9.0.0  (npm)
+       └─ sqlite-mcp  (MCP Server · unverified)
+            ├─ Cursor IDE  (Agent · 4 servers · 12 tools)
+            ├─ ANTHROPIC_KEY, DB_URL, AWS_SECRET  (Credentials exposed)
+            └─ query_db, read_file, write_file, run_shell  (Tools at risk)
+
+ Fix: upgrade better-sqlite3 → 11.7.0
+```
+
+| | Grype / Syft / Trivy | agent-bom |
+|---|---|---|
+| Package CVE detection | Yes | Yes — OSV batch + NVD CVSS v4 + FIRST EPSS + CISA KEV |
+| SBOM generation | Yes (Syft) | Yes — CycloneDX 1.6, SPDX 3.0, SARIF |
+| **AI agent discovery** | — | 11 MCP clients auto-discovered (Claude, Cursor, Windsurf, Cortex Code, OpenClaw, ...) |
+| **Blast radius mapping** | — | CVE → package → server → agent → credentials → tools |
+| **Credential exposure** | — | Which secrets leak per vulnerability, per agent |
+| **MCP tool reachability** | — | Which tools (read_file, run_shell) an attacker reaches post-exploit |
+| **Enterprise remediation** | — | Named assets, impact percentages, risk narratives per fix |
+| **OWASP LLM + MITRE ATLAS + NIST AI RMF** | — | Triple-framework tagging on every finding |
+| **AI-powered enrichment** | — | LLM-generated threat chains and executive summaries |
+| **Policy-as-code for AI** | — | Block unverified servers, enforce thresholds in CI/CD |
+| **112-server MCP registry** | — | Risk levels, provenance, tool inventories per server |
+
+**Ecosystem:** Ships as a [ToolHive](integrations/toolhive/) container, an [MCP Registry](integrations/mcp-registry/server.json) entry for any MCP client, an [OpenClaw](integrations/openclaw/SKILL.md) skill, and a [GitHub Action](action.yml) for CI/CD.
+
 <table>
 <tr>
-<td width="55%" valign="top">
-
-**Not just "this package has a CVE."**
-
-agent-bom answers the question security teams actually need:
-
-> *If this CVE is exploited, which AI agents are compromised, which credentials leak, and which tools can an attacker reach?*
-
-- **AI-BOM generation** — structured inventory of agents, servers, packages, credentials, tools
-- **Blast radius analysis** — maps CVEs to agents, credentials, and MCP tools
-- **Enterprise remediation** — named assets, impact percentages, risk narratives per fix
-- **OWASP LLM Top 10 + MITRE ATLAS + NIST AI RMF** — triple threat framework tagging on every finding
-- **AI-powered enrichment** — LLM-generated risk narratives, executive summaries, and threat chains via `--ai-enrich`
-- **112-server MCP registry** — risk levels, risk justifications, tool inventories, detail pages (incl. OpenClaw)
-- **Policy-as-code** — block unverified servers, enforce risk thresholds in CI
-- **Read-only** — never writes configs, never runs servers, never stores secrets
-- **Works everywhere** — CLI, Docker, REST API, Cloud UI, CI/CD, Prometheus, Kubernetes
-
-</td>
-<td width="45%" valign="top">
+<td width="50%" valign="top">
 
 **What it scans:**
 
@@ -71,14 +84,19 @@ agent-bom answers the question security teams actually need:
 | Python agents | 10 frameworks detected |
 | Cloud providers | AWS, Azure, GCP, Databricks, Snowflake, Nebius |
 | AI platforms | HuggingFace, W&B, MLflow, OpenAI |
-| MCP servers | Runtime introspection via MCP SDK |
 | Jupyter notebooks | AI library imports + model refs |
-| Model files | .gguf, .safetensors, .onnx, .pt, .pkl |
+| Model files | 13 formats (.gguf, .safetensors, .onnx, .pt, .pkl, ...) |
+| Skill files | CLAUDE.md, .cursorrules, skills.md, AGENTS.md |
 | Existing SBOMs | CycloneDX / SPDX import |
+
+</td>
+<td width="50%" valign="top">
 
 **What it outputs:**
 
 Console, HTML dashboard, SARIF, CycloneDX 1.6, SPDX 3.0, Prometheus, OTLP, JSON, REST API
+
+**Read-only guarantee:** Never writes configs, never runs servers, never stores secrets. All API calls (OSV, NVD, EPSS) are read-only queries. `--dry-run` shows every file and API URL before access.
 
 </td>
 </tr>

@@ -8,6 +8,7 @@ Produces Cytoscape.js-compatible element lists consumable by:
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -58,6 +59,8 @@ def build_graph_elements(
             "severity": br.vulnerability.severity.value,
             "summary": br.vulnerability.summary[:100] if br.vulnerability.summary else "",
             "risk_score": br.risk_score,
+            "cvss_score": br.vulnerability.cvss_score or 0,
+            "fix_version": br.vulnerability.fixed_version or "",
         })
 
     for agent in report.agents:
@@ -84,6 +87,12 @@ def build_graph_elements(
                 f"Source: {source}\n"
                 f"Servers: {len(agent.mcp_servers)}"
             ),
+            "agentType": agent.agent_type.value,
+            "configPath": agent.config_path or "",
+            "source": source,
+            "serverCount": len(agent.mcp_servers),
+            "packageCount": agent.total_packages,
+            "vulnCount": agent.total_vulnerabilities,
         }})
         # Edge: provider → agent
         elements.append({"data": {
@@ -114,6 +123,11 @@ def build_graph_elements(
                 "label": srv.name + pkg_badge,
                 "type": stype,
                 "tip": f"MCP Server: {srv.name}{pkg_note}{cinfo}",
+                "command": ((srv.command or "") + " " + " ".join((srv.args or [])[:3]))[:80].strip(),
+                "packageCount": len(srv.packages),
+                "vulnCount": vuln_count,
+                "credentials": json.dumps(srv.credential_names) if srv.credential_names else "[]",
+                "toolNames": json.dumps([t.name for t in srv.tools[:10]]) if srv.tools else "[]",
             }})
             # Edge: agent → server
             elements.append({"data": {
@@ -141,6 +155,7 @@ def build_graph_elements(
                 seen_pkg_ids.add(pid)
 
                 vc = len(pkg.vulnerabilities)
+                vuln_ids = [vi["id"] for vi in pkg_to_vulns.get(pkg_key, [])]
                 elements.append({"data": {
                     "id": pid,
                     "label": f"{pkg.name}\n{pkg.version}",
@@ -151,6 +166,9 @@ def build_graph_elements(
                         f"Ecosystem: {pkg.ecosystem}\n"
                         f"Vulnerabilities: {vc if vc else '(via blast radius)'}"
                     ),
+                    "ecosystem": pkg.ecosystem,
+                    "version": pkg.version,
+                    "vulnIds": json.dumps(vuln_ids),
                 }})
                 # Edge: server → package
                 elements.append({"data": {
@@ -175,6 +193,10 @@ def build_graph_elements(
                                     f"Severity: {sev}\n"
                                     f"{vuln_info['summary']}"
                                 ),
+                                "severity": sev,
+                                "cvssScore": vuln_info.get("cvss_score", 0),
+                                "summary": vuln_info.get("summary", ""),
+                                "fixVersion": vuln_info.get("fix_version", ""),
                             }})
                         # Edge: package → CVE
                         elements.append({"data": {

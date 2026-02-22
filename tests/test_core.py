@@ -2896,3 +2896,43 @@ def test_html_vuln_rows_have_data_attributes():
     assert 'data-severity="high"' in html
     assert 'data-kev=' in html
     assert 'data-cvss=' in html
+
+
+# ─── HTML node detail sidebar tests ──────────────────────────────────────────
+
+
+def test_html_contains_node_detail_sidebar():
+    """HTML report includes the node detail sidebar container."""
+    from agent_bom.output.html import to_html
+
+    report, blast_radii = _make_report_with_vuln()
+    html = to_html(report, blast_radii)
+    assert 'id="nodeDetailSidebar"' in html
+    assert 'class="node-sidebar"' in html
+    assert 'id="sidebarClose"' in html
+    assert 'id="sidebarNodeType"' in html
+    assert 'id="sidebarNodeName"' in html
+
+
+def test_html_sidebar_has_section_containers():
+    """Sidebar includes all required section containers for detail display."""
+    from agent_bom.output.html import to_html
+
+    report, blast_radii = _make_report_with_vuln()
+    html = to_html(report, blast_radii)
+    assert 'id="sidebarConnected"' in html
+    assert 'id="sidebarCredentials"' in html
+    assert 'id="sidebarCves"' in html
+    assert 'id="sidebarRemediation"' in html
+
+
+def test_html_graph_nodes_have_sidebar_data():
+    """Graph node elements include structured data fields for sidebar population."""
+    from agent_bom.output.html import to_html
+
+    report, blast_radii = _make_report_with_vuln()
+    html = to_html(report, blast_radii)
+    assert '"agentType"' in html
+    assert '"credentials"' in html
+    assert '"severity"' in html
+    assert '"ecosystem"' in html
