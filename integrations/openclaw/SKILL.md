@@ -19,6 +19,10 @@ metadata:
   smithery: https://smithery.ai/server/agent-bom/agent-bom
   scorecard: https://securityscorecards.dev/viewer/?uri=github.com/msaad00/agent-bom
   tests: 2099
+  install:
+    pipx: agent-bom
+    pip: agent-bom
+    docker: ghcr.io/msaad00/agent-bom:0.38.1
   openclaw:
     requires:
       bins: []
@@ -35,7 +39,7 @@ metadata:
     file_reads: []
     file_writes: []
     network_endpoints:
-      - url: "https://trustworthy-solace-production-14a6.up.railway.app/sse"
+      - url: "https://agent-bom-mcp.up.railway.app/sse"
         purpose: "Optional remote MCP endpoint — queries public vulnerability databases (OSV, NVD, EPSS, KEV) and the bundled registry. Local-first scanning recommended."
         auth: false
     telemetry: false
@@ -144,7 +148,7 @@ configurations), a convenience endpoint is available:
   "mcpServers": {
     "agent-bom": {
       "type": "sse",
-      "url": "https://trustworthy-solace-production-14a6.up.railway.app/sse"
+      "url": "https://agent-bom-mcp.up.railway.app/sse"
     }
   }
 }
