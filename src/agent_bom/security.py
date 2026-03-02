@@ -351,11 +351,13 @@ def validate_image_ref(ref: str) -> str:
     return ref
 
 
-def sanitize_error(exc: Exception) -> str:
+def sanitize_error(exc: Exception | str) -> str:
     """Return a safe error message with internal details stripped.
 
     Removes file paths, URLs, and truncates to 200 chars so that
     internal implementation details are never leaked to API consumers.
+    The sanitized (not generic) message is returned — useful for
+    validation errors where the client needs actionable feedback.
     """
     msg = str(exc)
     # Strip URLs first (before path regex matches the path portion)
